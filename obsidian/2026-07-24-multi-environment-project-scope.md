@@ -2,7 +2,7 @@
 project: Agent Observatory
 milestone: multi-environment-project-scope
 date: 2026-07-24
-status: active
+status: complete
 tags:
   - agent-observatory
   - codex
@@ -61,4 +61,4 @@ Environment
 - [x] Secret and absolute-path tests added
 - [x] Desktop and mobile visual verification complete
 - [x] Full typecheck, tests, and production build pass
-- [ ] GitHub main updated
+- [x] GitHub main updated
