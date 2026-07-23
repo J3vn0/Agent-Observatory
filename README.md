@@ -6,17 +6,28 @@ The first domain expansion is **Finance**, with explicit provenance, freshness, 
 
 ## Product shape
 
-- A browser-based dashboard for graph exploration, health, overlap, and capability coverage
+- A desktop-first browser dashboard for graph exploration, health, overlap, and capability coverage
 - A local daemon that discovers agent, skill, and MCP configuration
 - An explainable similarity engine for agents and skills
 - Domain packs, starting with finance
 - Obsidian-compatible project memory in `obsidian/`
 
+## Design direction
+
+The dashboard uses a white, editorial SaaS interface inspired by the clarity of the public [ElevenLabs](https://elevenlabs.io/) website:
+
+- generous white space and large sans-serif hierarchy
+- black primary actions and thin neutral borders
+- connected desktop metric strips instead of mobile-style cards
+- restrained color through Agent Observatory’s own graph-orb motif
+
+The implementation does not copy ElevenLabs branding, imagery, copy, or page composition.
+
 ## Repository layout
 
 ```text
 apps/
-  dashboard/       React + Vite web control plane
+  dashboard/       React + Vite desktop web control plane
 packages/
   core/            Graph model, metrics, and similarity contracts
   finance/         Finance domain tags, evidence, and guardrails
@@ -59,6 +70,8 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+The current UI has been browser-verified at 1440×1000, 1024×900, and 390×844.
 
 ## Next milestone
 

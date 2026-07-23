@@ -30,11 +30,21 @@ The product should answer:
 
 ## Product decision
 
-- Primary experience: browser dashboard
+- Primary experience: desktop-first browser dashboard
+- Responsive support: tablet and mobile, without using mobile proportions as the desktop baseline
 - Runtime: local daemon and local data store
 - Optional later surface: terminal/TUI
 - Initial domain pack: finance
 - Default safety posture: read-only discovery and explicit approval for mutations
+
+## Visual direction
+
+- Mode: white/light
+- Style: minimal editorial SaaS operations console
+- Reference principles: public ElevenLabs site, observed 2026-07-23
+- Reused principles: white space, large sans-serif type, black primary actions, thin neutral borders, restrained pill controls
+- Original product motif: a coral/pink/violet system orb representing connected agent capabilities
+- Explicit boundary: do not copy ElevenLabs branding, imagery, copy, or exact composition
 
 ## Core graph
 
@@ -71,23 +81,29 @@ The finance pack starts with ETF, bond, filing, and macro-research workflows. It
 ## Implemented vertical slice
 
 - npm workspace with `apps/dashboard`, `packages/core`, and `packages/finance`
-- React + Vite dashboard
+- React + Vite desktop web dashboard
+- Global product header and persistent workspace sidebar
+- 1440px primary desktop canvas with a 244px workspace sidebar
 - Typed graph node, edge, finding, and snapshot contracts
 - Deterministic and explainable tag/dependency similarity
 - Fixture inventory for agents, skills, and MCP servers
 - Relationship graph with health states
 - Finance guardrail posture for read-only tools, freshness, and citations
 - Integration filtering for all assets or finance assets
-- Responsive 1440px and 390px layouts
+- Responsive support at 1024px and 390px
 
 ## Validation
 
 - `npm run typecheck`: passed
 - `npm test`: 2 tests passed
 - `npm run build`: passed
+- Desktop 1440×1000: passed
+- Desktop/tablet 1024×900: passed
+- Mobile 390×844: passed
 - Browser console errors/warnings: none
 - Browser network 4xx/5xx: none
-- Mobile document horizontal overflow: false
+- Desktop document horizontal overflow: false
+- Desktop computed layout: 244px sidebar, approximately 1181px main canvas, four metric columns
 - Reduced-motion CSS: included
 - Current data mode: explicit `Demo fixture`
 
@@ -99,6 +115,7 @@ The finance pack starts with ETF, bond, filing, and macro-research workflows. It
 - [x] Worktrees created
 - [x] Parallel design documents merged
 - [x] Dashboard vertical slice running
+- [x] White desktop-first UI redesign verified
 - [ ] Local daemon scanner reads real Codex/Claude/Cursor configuration
 - [ ] SQLite graph persistence
 - [ ] Real MCP health probes
@@ -111,6 +128,8 @@ The finance pack starts with ETF, bond, filing, and macro-research workflows. It
 - 2026-07-23: Persist UI design-system output in the repository.
 - 2026-07-23: Start with deterministic similarity based on shared tags and dependencies before optional embeddings.
 - 2026-07-23: Label fixtures explicitly so simulated observation data cannot be mistaken for live state.
+- 2026-07-23: Make desktop web the primary dashboard canvas.
+- 2026-07-23: Replace the initial dark operations style with a white editorial interface.
 
 ## Working links
 
@@ -119,6 +138,7 @@ The finance pack starts with ETF, bond, filing, and macro-research workflows. It
 - Architecture: `docs/architecture/ARCHITECTURE.md`
 - Finance pack: `docs/finance/FINANCE_PACK.md`
 - Dashboard specification: `docs/design/DASHBOARD_SPEC.md`
+- Design system: `design-system/agent-observatory/MASTER.md`
 
 ## Next actions
 
