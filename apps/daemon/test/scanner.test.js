@@ -20,6 +20,7 @@ const SECRET_SENTINELS = [
 let fixtureRoot;
 let codexRoot;
 let agentsRoot;
+let claudeRoot;
 
 before(async () => {
   fixtureRoot = await fs.mkdtemp(
@@ -27,6 +28,7 @@ before(async () => {
   );
   codexRoot = path.join(fixtureRoot, "codex-home");
   agentsRoot = path.join(fixtureRoot, "agents-home");
+  claudeRoot = path.join(fixtureRoot, "claude-home");
 
   await fs.mkdir(path.join(codexRoot, "skills", "frontend-testing"), {
     recursive: true,
@@ -117,7 +119,7 @@ after(async () => {
 
 describe("local observatory scanner", () => {
   it("discovers and deduplicates display-safe local assets", async () => {
-    const snapshot = await scanObservatory({ codexRoot, agentsRoot });
+    const snapshot = await scanObservatory({ codexRoot, agentsRoot, claudeRoot });
     const skills = snapshot.nodes.filter((node) => node.kind === "skill");
     const mcps = snapshot.nodes.filter((node) => node.kind === "mcp-server");
 
@@ -150,7 +152,7 @@ describe("local observatory scanner", () => {
 
   it("never includes config values, commands, URLs, env values, hashes, or credentials", async () => {
     const serialized = JSON.stringify(
-      await scanObservatory({ codexRoot, agentsRoot }),
+      await scanObservatory({ codexRoot, agentsRoot, claudeRoot }),
     );
 
     for (const sentinel of SECRET_SENTINELS) {
@@ -192,7 +194,7 @@ describe("local observatory scanner", () => {
 
 describe("local HTTP daemon", () => {
   it("serves health and snapshot routes on loopback", async () => {
-    const server = createDaemon({ codexRoot, agentsRoot });
+    const server = createDaemon({ codexRoot, agentsRoot, claudeRoot });
     await new Promise((resolve, reject) => {
       server.once("error", reject);
       server.listen(0, "127.0.0.1", resolve);

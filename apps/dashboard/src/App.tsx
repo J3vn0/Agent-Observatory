@@ -10,13 +10,16 @@ import {
   CircleAlert,
   Code2,
   Database,
+  FolderGit2,
   GitBranch,
+  Globe2,
   Languages,
+  LayoutDashboard,
   Network,
   PlugZap,
   RefreshCw,
   Search,
-  Settings2,
+  ServerCog,
   ShieldCheck,
   Sparkles,
   Webhook,
@@ -27,12 +30,26 @@ import {
   PROGRAMMING_TAG_LABELS,
   PROGRAMMING_TAGS,
   deriveOverview,
+  type AgentSessionRecord,
+  type EnvironmentKind,
+  type EnvironmentRecord,
   type GraphNode,
   type HealthState,
   type NodeKind,
   type ObservatorySnapshot,
   type ProgrammingTag,
+  type ProjectRecord,
 } from "@agent-observatory/core";
+import { ec } from "./environment-copy";
+import {
+  disambiguatedProjectLabel,
+  nodeEnvironment,
+  nodesInScope,
+  projectsInScope,
+  sessionsInScope,
+  type EnvironmentScope,
+  type ObservatoryScope,
+} from "./scope";
 import {
   getLocalizedNodeText,
   t,
@@ -40,26 +57,49 @@ import {
 } from "./i18n";
 import { useSnapshot, type SnapshotConnection } from "./useSnapshot";
 
-const PAGE_SIZE = 24;
-const GRAPH_LIMITS: Partial<Record<NodeKind, number>> = {
-  agent: 3,
-  skill: 5,
-  plugin: 2,
-  hook: 2,
-  "mcp-server": 3,
-};
-const KIND_FILTERS: Array<NodeKind | "all"> = [
-  "all",
-  "skill",
-  "agent",
-  "plugin",
-  "hook",
-  "mcp-server",
+type PageKey =
+  | "overview"
+  | "projects"
+  | "agents"
+  | "skills"
+  | "integrations"
+  | "graph";
+
+const PAGE_KEYS: PageKey[] = [
+  "overview",
+  "projects",
+  "agents",
+  "skills",
+  "integrations",
+  "graph",
 ];
+const PAGE_SIZE = 24;
+
+function pageFromHash(): PageKey {
+  const candidate = window.location.hash.replace(/^#\/?/, "").split("?")[0];
+  return PAGE_KEYS.includes(candidate as PageKey)
+    ? (candidate as PageKey)
+    : "overview";
+}
+
+function usePage() {
+  const [page, setPage] = useState<PageKey>(pageFromHash);
+  useEffect(() => {
+    const update = () => setPage(pageFromHash());
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
+  }, []);
+  const navigate = (next: PageKey) => {
+    window.location.hash = `/${next}`;
+    setPage(next);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  return { page, navigate };
+}
 
 function Brand() {
   return (
-    <a className="brand" href="#overview" aria-label="Agent Observatory">
+    <a className="brand" href="#/overview" aria-label="Agent Observatory">
       <span className="brand-mark" aria-hidden="true">
         <span />
         <span />
@@ -77,9 +117,42 @@ function nodeIcon(kind: NodeKind): LucideIcon {
     plugin: PlugZap,
     hook: Webhook,
     "mcp-server": Database,
-    "mcp-tool": Settings2,
+    project: FolderGit2,
+    execution: Activity,
+    provider: ServerCog,
   };
   return icons[kind] ?? Boxes;
+}
+
+function pageIcon(page: PageKey): LucideIcon {
+  const icons: Record<PageKey, LucideIcon> = {
+    overview: LayoutDashboard,
+    projects: FolderGit2,
+    agents: Bot,
+    skills: Braces,
+    integrations: PlugZap,
+    graph: Network,
+  };
+  return icons[page];
+}
+
+function tagLabel(tag: string, language: Language) {
+  return PROGRAMMING_TAGS.includes(tag as ProgrammingTag)
+    ? PROGRAMMING_TAG_LABELS[tag as ProgrammingTag][language]
+    : tag;
+}
+
+function kindLabel(kind: NodeKind, language: Language) {
+  return t(language, "kinds", kind);
+}
+
+function formatDate(language: Language, value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return "—";
+  return new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }
 
 function HealthBadge({
@@ -118,347 +191,863 @@ function ConnectionBadge({
   );
 }
 
-function tagLabel(tag: string, language: Language) {
-  return PROGRAMMING_TAGS.includes(tag as ProgrammingTag)
-    ? PROGRAMMING_TAG_LABELS[tag as ProgrammingTag][language]
-    : tag;
-}
-
-function kindLabel(kind: NodeKind, language: Language) {
-  return t(language, "kinds", kind);
-}
-
-function localizedFinding(
-  finding: ObservatorySnapshot["findings"][number],
-  language: Language,
-) {
-  return {
-    title: finding.localized?.title[language] ?? finding.title,
-    detail: finding.localized?.detail[language] ?? finding.detail,
-    action: finding.localized?.action[language] ?? finding.action,
-  };
-}
-
-interface LayoutNode {
-  node: GraphNode;
-  x: number;
-  y: number;
-}
-
-function graphLayout(nodes: GraphNode[]): LayoutNode[] {
-  const columns: Array<{ kinds: NodeKind[]; x: number }> = [
-    { kinds: ["agent"], x: 105 },
-    { kinds: ["skill"], x: 390 },
-    { kinds: ["plugin", "hook", "mcp-server"], x: 690 },
-  ];
-  const result: LayoutNode[] = [];
-
-  columns.forEach(({ kinds, x }) => {
-    const column = kinds.flatMap((kind) =>
-      nodes
-        .filter((node) => node.kind === kind)
-        .slice(0, GRAPH_LIMITS[kind] ?? 2),
-    );
-    const spacing = 360 / Math.max(column.length, 1);
-    column.forEach((node, index) => {
-      result.push({ node, x, y: 42 + spacing * index + spacing / 2 });
-    });
-  });
-
-  return result;
-}
-
-function RelationshipGraph({
-  snapshot,
+function PageHeader({
+  page,
   language,
-  selectedId,
-  onSelect,
+  actions,
+}: {
+  page: PageKey;
+  language: Language;
+  actions?: React.ReactNode;
+}) {
+  const copy = ec(language);
+  const Icon = pageIcon(page);
+  return (
+    <header className="page-header">
+      <div className="page-title">
+        <span className="page-icon"><Icon size={19} /></span>
+        <div>
+          <p className="eyebrow">{copy.currentScope}</p>
+          <h1>{copy.pages[page]}</h1>
+          <p>{copy.pageDescriptions[page]}</p>
+        </div>
+      </div>
+      {actions && <div className="page-actions">{actions}</div>}
+    </header>
+  );
+}
+
+function ScopeBar({
+  snapshot,
+  scope,
+  language,
+  connection,
+  onScopeChange,
+  onLanguageChange,
+  onRefresh,
 }: {
   snapshot: ObservatorySnapshot;
+  scope: ObservatoryScope;
   language: Language;
-  selectedId: string | null;
-  onSelect: (node: GraphNode) => void;
+  connection: SnapshotConnection;
+  onScopeChange: (scope: ObservatoryScope) => void;
+  onLanguageChange: () => void;
+  onRefresh: () => void;
 }) {
-  const candidates = useMemo(() => {
-    const scored = [...snapshot.nodes].sort((left, right) => {
-      const programming = Number(Boolean(right.programming)) - Number(Boolean(left.programming));
-      if (programming) return programming;
-      return left.label.localeCompare(right.label);
-    });
-    return scored.filter((node) => Object.hasOwn(GRAPH_LIMITS, node.kind));
-  }, [snapshot.nodes]);
-  const layout = useMemo(() => graphLayout(candidates), [candidates]);
-  const points = new Map(layout.map((item) => [item.node.id, item]));
-  const edges = snapshot.edges.filter(
-    (edge) => points.has(edge.source) && points.has(edge.target),
+  const copy = ec(language);
+  const environments = snapshot.environments ?? [];
+  const allProjects = snapshot.projects ?? [];
+  const selectableProjects = allProjects.filter(
+    (project) =>
+      scope.environment === "all" || project.environment === scope.environment,
   );
-
-  if (!layout.length) {
-    return (
-      <div className="empty-state">
-        <Network size={24} />
-        <strong>{t(language, "states", "empty")}</strong>
-        <span>{t(language, "states", "emptyDescription")}</span>
-      </div>
-    );
-  }
-
   return (
-    <div className="graph-shell">
-      <svg
-        className="relationship-graph"
-        viewBox="0 0 900 440"
-        role="img"
-        aria-label={t(language, "graph", "description")}
-      >
-        <defs>
-          <marker
-            id="edge-arrow"
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="5"
-            markerHeight="5"
-            orient="auto-start-reverse"
+    <div className="scope-bar">
+      <div className="scope-control">
+        <span>{copy.environment}</span>
+        <div className="environment-segments" role="group" aria-label={copy.environment}>
+          <button
+            className={scope.environment === "all" ? "active" : ""}
+            type="button"
+            onClick={() => onScopeChange({ environment: "all", projectId: null })}
           >
-            <path d="M 0 0 L 10 5 L 0 10 z" />
-          </marker>
-        </defs>
-        <g className="graph-guides" aria-hidden="true">
-          <line x1="105" y1="20" x2="105" y2="420" />
-          <line x1="390" y1="20" x2="390" y2="420" />
-          <line x1="690" y1="20" x2="690" y2="420" />
-        </g>
-        <g className="graph-edges">
-          {edges.map((edge) => {
-            const source = points.get(edge.source)!;
-            const target = points.get(edge.target)!;
-            return (
-              <line
-                key={edge.id}
-                x1={source.x + 82}
-                y1={source.y}
-                x2={target.x - 82}
-                y2={target.y}
-                markerEnd="url(#edge-arrow)"
-              >
-                <title>{edge.kind}</title>
-              </line>
-            );
-          })}
-        </g>
-        {layout.map(({ node, x, y }) => {
-          const text = getLocalizedNodeText(node, language);
-          const active = selectedId === node.id;
-          return (
-            <g
-              key={node.id}
-              className={`graph-node graph-node-${node.kind} ${active ? "is-selected" : ""}`}
-              transform={`translate(${x - 82} ${y - 25})`}
-              role="button"
-              tabIndex={0}
-              onClick={() => onSelect(node)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") onSelect(node);
-              }}
+            <Globe2 size={14} />
+            {copy.globalScope}
+          </button>
+          {environments.map((environment) => (
+            <button
+              className={scope.environment === environment.id ? "active" : ""}
+              type="button"
+              key={environment.id}
+              disabled={!environment.installed}
+              onClick={() =>
+                onScopeChange({ environment: environment.id, projectId: null })
+              }
             >
-              <rect width="164" height="50" rx="11" />
-              <circle cx="18" cy="17" r="4" className={`node-health-${node.health}`} />
-              <text x="30" y="20" className="node-title">
-                {text.label.length > 18 ? `${text.label.slice(0, 17)}…` : text.label}
-              </text>
-              <text x="18" y="37" className="node-kind">
-                {kindLabel(node.kind, language)}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-      <div className="graph-column-labels" aria-hidden="true">
-        <span>{kindLabel("agent", language)}</span>
-        <span>{kindLabel("skill", language)}</span>
-        <span>MCP · Plugin · Hook</span>
+              <span className={`environment-dot environment-${environment.id}`} />
+              {environment.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <label className="project-select">
+        <span>{copy.projectScope}</span>
+        <select
+          id="observatory-project-scope"
+          name="observatory-project-scope"
+          value={scope.projectId ?? ""}
+          onChange={(event) => {
+            const project = allProjects.find(
+              (candidate) => candidate.id === event.target.value,
+            );
+            onScopeChange({
+              environment: project?.environment ?? scope.environment,
+              projectId: project?.id ?? null,
+            });
+          }}
+        >
+          <option value="">{copy.allProjects}</option>
+          {selectableProjects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.environment.toUpperCase()} ·{" "}
+              {disambiguatedProjectLabel(project, allProjects)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="scope-actions">
+        <ConnectionBadge connection={connection} language={language} />
+        <button
+          className="icon-action"
+          type="button"
+          onClick={onRefresh}
+          aria-label={t(language, "scan", "scanAgain")}
+        >
+          <RefreshCw
+            size={16}
+            className={connection === "loading" ? "is-spinning" : ""}
+          />
+        </button>
+        <button
+          className="language-toggle"
+          type="button"
+          onClick={onLanguageChange}
+          aria-label={t(language, "language", "toggleLabel")}
+        >
+          <Languages size={16} />
+          {language === "ko" ? "EN" : "한"}
+        </button>
       </div>
     </div>
   );
 }
 
-function NodeDetail({
-  node,
-  language,
-  onClose,
+function Metric({
+  icon: Icon,
+  label,
+  value,
+  note,
 }: {
-  node: GraphNode;
-  language: Language;
-  onClose: () => void;
+  icon: LucideIcon;
+  label: string;
+  value: number;
+  note?: string;
 }) {
-  const Icon = nodeIcon(node.kind);
-  const text = getLocalizedNodeText(node, language);
   return (
-    <aside className="node-detail" aria-label={t(language, "detail", "details")}>
-      <button className="detail-close" type="button" onClick={onClose}>
-        <X size={17} />
-        <span className="sr-only">{t(language, "detail", "close")}</span>
-      </button>
-      <div className={`detail-icon detail-icon-${node.kind}`}>
-        <Icon size={19} />
+    <div className="metric">
+      <div className="metric-label"><Icon size={16} /><span>{label}</span></div>
+      <strong>{value.toLocaleString()}</strong>
+      {note && <small>{note}</small>}
+    </div>
+  );
+}
+
+function EnvironmentCard({
+  environment,
+  language,
+  active,
+  onSelect,
+}: {
+  environment: EnvironmentRecord;
+  language: Language;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const copy = ec(language);
+  return (
+    <button
+      type="button"
+      className={`environment-card ${active ? "active" : ""}`}
+      onClick={onSelect}
+      disabled={!environment.installed}
+    >
+      <div className="environment-card-head">
+        <span className={`environment-logo environment-${environment.id}`}>
+          {environment.id === "codex" ? "CX" : environment.id === "claude" ? "CL" : environment.label.slice(0, 2)}
+        </span>
+        <div>
+          <strong>{environment.label}</strong>
+          <span className={environment.installed ? "detected" : "not-detected"}>
+            {environment.installed ? copy.detected : copy.notDetected}
+          </span>
+        </div>
+        <ChevronRight size={18} />
       </div>
-      <p className="eyebrow">{kindLabel(node.kind, language)}</p>
-      <h3>{text.label}</h3>
-      <p className="detail-summary">{text.summary}</p>
-      <HealthBadge health={node.health} language={language} />
-      <dl>
-        <div>
-          <dt>{t(language, "detail", "origin")}</dt>
-          <dd>{node.origin ?? node.source ?? "—"}</dd>
-        </div>
-        <div>
-          <dt>{t(language, "detail", "path")}</dt>
-          <dd className="mono">{node.path ?? "—"}</dd>
-        </div>
-        <div>
-          <dt>{t(language, "detail", "programming")}</dt>
-          <dd>{node.programming ? t(language, "common", "yes") : t(language, "common", "no")}</dd>
-        </div>
-      </dl>
-      <div className="detail-tags">
-        {node.tags.map((tag) => (
-          <span key={tag}>{tagLabel(tag, language)}</span>
+      <div className="environment-stats">
+        <span><strong>{environment.projectCount}</strong>{copy.projects}</span>
+        <span><strong>{environment.sessionCount}</strong>{copy.sessions}</span>
+        <span><strong>{environment.subagentCount}</strong>{copy.subagents}</span>
+      </div>
+      <div className="capability-list">
+        {environment.capabilities.slice(0, 6).map((capability) => (
+          <span key={capability}>{capability}</span>
         ))}
       </div>
-    </aside>
+    </button>
+  );
+}
+
+function OverviewPage({
+  snapshot,
+  scope,
+  language,
+  navigate,
+  onScopeChange,
+}: {
+  snapshot: ObservatorySnapshot;
+  scope: ObservatoryScope;
+  language: Language;
+  navigate: (page: PageKey) => void;
+  onScopeChange: (scope: ObservatoryScope) => void;
+}) {
+  const copy = ec(language);
+  const metrics = deriveOverview(snapshot);
+  const projects = projectsInScope(snapshot, scope);
+  const sessions = sessionsInScope(snapshot, scope);
+  const primaryCount = sessions.filter((session) => session.kind === "primary").length;
+  const subagentCount = sessions.filter((session) => session.kind === "subagent").length;
+  const recent = sessions.slice(0, 8);
+  return (
+    <>
+      <PageHeader page="overview" language={language} />
+      <section className="metric-strip metric-strip-wide">
+        <Metric icon={FolderGit2} label={copy.projects} value={projects.length} />
+        <Metric icon={Activity} label={copy.primarySessions} value={primaryCount} />
+        <Metric icon={Bot} label={copy.subagents} value={subagentCount} />
+        <Metric icon={Braces} label={t(language, "overview", "skills")} value={metrics.skillCount} />
+        <Metric icon={PlugZap} label={t(language, "overview", "plugins")} value={metrics.pluginCount + metrics.hookCount + metrics.mcpCount} />
+      </section>
+
+      <section className="content-section">
+        <div className="section-heading">
+          <div><p className="eyebrow">{copy.environmentCoverage}</p><h2>{copy.installedCapabilities}</h2></div>
+          <span className="privacy-note"><ShieldCheck size={15} />{copy.liveMetadataOnly}</span>
+        </div>
+        <div className="environment-grid">
+          {(snapshot.environments ?? []).map((environment) => (
+            <EnvironmentCard
+              key={environment.id}
+              environment={environment}
+              language={language}
+              active={scope.environment === environment.id}
+              onSelect={() =>
+                onScopeChange({ environment: environment.id, projectId: null })
+              }
+            />
+          ))}
+        </div>
+      </section>
+
+      <section className="overview-columns">
+        <article className="surface-panel">
+          <div className="panel-heading">
+            <div><p className="eyebrow">{copy.projectHistory}</p><h2>{copy.recentActivity}</h2></div>
+            <button type="button" onClick={() => navigate("projects")}>{copy.projects}<ChevronRight size={15} /></button>
+          </div>
+          <div className="activity-list">
+            {recent.length ? recent.map((session) => {
+              const project = (snapshot.projects ?? []).find(
+                (candidate) => candidate.id === session.projectId,
+              );
+              return (
+                <div key={session.id} className="activity-row">
+                  <span className={`session-kind-icon session-${session.kind}`}>
+                    {session.kind === "subagent" ? <Bot size={15} /> : <Activity size={15} />}
+                  </span>
+                  <div><strong>{session.label}</strong><span>{project?.label ?? "—"} · {session.environment}</span></div>
+                  <time>{formatDate(language, session.observedAt)}</time>
+                </div>
+              );
+            }) : <EmptyState text={copy.noAgentActivity} />}
+          </div>
+        </article>
+        <article className="surface-panel selected-scope-panel">
+          <div className="panel-heading">
+            <div><p className="eyebrow">{copy.currentScope}</p><h2>{scope.projectId ? copy.selectedProject : copy.globalScope}</h2></div>
+            <Network size={18} />
+          </div>
+          <div className="scope-summary">
+            <div><span>{copy.projectCount}</span><strong>{projects.length}</strong></div>
+            <div><span>{copy.sessionCount}</span><strong>{sessions.length}</strong></div>
+            <div><span>{copy.subagentCount}</span><strong>{subagentCount}</strong></div>
+          </div>
+          <button className="primary-button" type="button" onClick={() => navigate("graph")}>
+            <Network size={16} />{copy.environmentGraph}
+          </button>
+        </article>
+      </section>
+    </>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div className="empty-state">
+      <CircleAlert size={23} />
+      <span>{text}</span>
+    </div>
+  );
+}
+
+function SearchField({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <label className="search-field">
+      <Search size={17} />
+      <input
+        name="observatory-search"
+        aria-label={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+      />
+      {value && <button type="button" onClick={() => onChange("")}><X size={15} /></button>}
+    </label>
+  );
+}
+
+function Pagination({
+  page,
+  pageCount,
+  language,
+  onChange,
+}: {
+  page: number;
+  pageCount: number;
+  language: Language;
+  onChange: (page: number) => void;
+}) {
+  const copy = ec(language);
+  return (
+    <div className="pagination">
+      <button type="button" disabled={page <= 1} onClick={() => onChange(page - 1)}>
+        <ChevronLeft size={16} />{copy.previous}
+      </button>
+      <span>{copy.page} {page} {copy.of} {pageCount}</span>
+      <button type="button" disabled={page >= pageCount} onClick={() => onChange(page + 1)}>
+        {copy.next}<ChevronRight size={16} />
+      </button>
+    </div>
+  );
+}
+
+function ProjectsPage({
+  snapshot,
+  scope,
+  language,
+  navigate,
+  onScopeChange,
+}: {
+  snapshot: ObservatorySnapshot;
+  scope: ObservatoryScope;
+  language: Language;
+  navigate: (page: PageKey) => void;
+  onScopeChange: (scope: ObservatoryScope) => void;
+}) {
+  const copy = ec(language);
+  const allProjects = snapshot.projects ?? [];
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const projects = projectsInScope(snapshot, { ...scope, projectId: null }).filter(
+    (project) =>
+      !search ||
+      disambiguatedProjectLabel(project, allProjects)
+        .toLocaleLowerCase()
+        .includes(search.toLocaleLowerCase()),
+  );
+  useEffect(() => setPage(1), [search, scope.environment]);
+  const pageCount = Math.max(1, Math.ceil(projects.length / 12));
+  const visible = projects.slice((page - 1) * 12, page * 12);
+  return (
+    <>
+      <PageHeader
+        page="projects"
+        language={language}
+        actions={<SearchField value={search} onChange={setSearch} placeholder={copy.searchProjects} />}
+      />
+      {scope.projectId && (
+        <button className="clear-scope" type="button" onClick={() => onScopeChange({ ...scope, projectId: null })}>
+          <X size={14} />{copy.clearProject}
+        </button>
+      )}
+      <section className="project-grid">
+        {visible.length ? visible.map((project) => (
+          <article
+            key={project.id}
+            className={`project-card ${scope.projectId === project.id ? "active" : ""}`}
+          >
+            <div className="project-card-top">
+              <span className={`environment-pill environment-${project.environment}`}>
+                {project.environment}
+              </span>
+              <FolderGit2 size={19} />
+            </div>
+            <h2>{disambiguatedProjectLabel(project, allProjects)}</h2>
+            <p>{copy.lastObserved} · {formatDate(language, project.lastObservedAt)}</p>
+            <div className="project-card-stats">
+              <span><strong>{project.sessionCount}</strong>{copy.sessions}</span>
+              <span><strong>{project.subagentCount}</strong>{copy.subagents}</span>
+            </div>
+            <div className="project-card-actions">
+              <button type="button" onClick={() => {
+                onScopeChange({ environment: project.environment, projectId: project.id });
+                navigate("agents");
+              }}>{copy.viewAgents}<ChevronRight size={15} /></button>
+              <button type="button" onClick={() => {
+                onScopeChange({ environment: project.environment, projectId: project.id });
+                navigate("graph");
+              }}><Network size={15} /></button>
+            </div>
+          </article>
+        )) : <EmptyState text={copy.noProjectActivity} />}
+      </section>
+      <Pagination page={page} pageCount={pageCount} language={language} onChange={setPage} />
+    </>
+  );
+}
+
+function AgentsPage({
+  snapshot,
+  scope,
+  language,
+}: {
+  snapshot: ObservatorySnapshot;
+  scope: ObservatoryScope;
+  language: Language;
+}) {
+  const copy = ec(language);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const projects = snapshot.projects ?? [];
+  const sessions = sessionsInScope(snapshot, scope).filter((session) =>
+    !search ||
+    `${session.label} ${session.role}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
+  );
+  useEffect(() => setPage(1), [search, scope.environment, scope.projectId]);
+  const pageCount = Math.max(1, Math.ceil(sessions.length / PAGE_SIZE));
+  const visible = sessions.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const byId = new Map((snapshot.sessions ?? []).map((session) => [session.id, session]));
+  return (
+    <>
+      <PageHeader
+        page="agents"
+        language={language}
+        actions={<SearchField value={search} onChange={setSearch} placeholder={copy.searchAgents} />}
+      />
+      <section className="metric-strip compact-metrics">
+        <Metric icon={Activity} label={copy.primarySessions} value={sessions.filter((session) => session.kind === "primary").length} />
+        <Metric icon={Bot} label={copy.subagents} value={sessions.filter((session) => session.kind === "subagent").length} />
+        <Metric icon={FolderGit2} label={copy.projects} value={new Set(sessions.map((session) => session.projectId)).size} />
+      </section>
+      <section className="wide-table-panel">
+        <div className="table-title">
+          <div><p className="eyebrow">{copy.agentHierarchy}</p><h2>{copy.projectHistory}</h2></div>
+          <span>{sessions.length.toLocaleString()}</span>
+        </div>
+        <div className="agent-table">
+          <div className="agent-table-head">
+            <span>{t(language, "registry", "name")}</span>
+            <span>{copy.projects}</span>
+            <span>{copy.parentSession}</span>
+            <span>{copy.role}</span>
+            <span>{copy.lastObserved}</span>
+          </div>
+          {visible.length ? visible.map((session) => {
+            const project = projects.find((candidate) => candidate.id === session.projectId);
+            const parent = session.parentSessionId ? byId.get(session.parentSessionId) : undefined;
+            return (
+              <div key={session.id} className={`agent-table-row session-row-${session.kind}`}>
+                <div className="session-name">
+                  <span className={`session-kind-icon session-${session.kind}`}>
+                    {session.kind === "subagent" ? <Bot size={15} /> : <Activity size={15} />}
+                  </span>
+                  <span><strong>{session.label}</strong><small>{session.environment} · {session.kind}</small></span>
+                </div>
+                <span>{project ? disambiguatedProjectLabel(project, projects) : "—"}</span>
+                <span>{parent?.label ?? (session.parentSessionId ? session.parentSessionId.slice(-8) : copy.standalone)}</span>
+                <span className="role-pill">{session.role}</span>
+                <time>{formatDate(language, session.observedAt)}</time>
+              </div>
+            );
+          }) : <EmptyState text={copy.noAgentActivity} />}
+        </div>
+      </section>
+      <Pagination page={page} pageCount={pageCount} language={language} onChange={setPage} />
+    </>
+  );
+}
+
+function AssetTable({
+  nodes,
+  language,
+}: {
+  nodes: GraphNode[];
+  language: Language;
+}) {
+  return (
+    <div className="asset-table">
+      <div className="asset-table-head">
+        <span>{t(language, "registry", "name")}</span>
+        <span>{t(language, "registry", "kind")}</span>
+        <span>{t(language, "detail", "tags")}</span>
+        <span>{t(language, "registry", "health")}</span>
+        <span>{t(language, "registry", "source")}</span>
+      </div>
+      {nodes.map((node) => {
+        const Icon = nodeIcon(node.kind);
+        const text = getLocalizedNodeText(node, language);
+        return (
+          <div className="asset-table-row" key={node.id}>
+            <div className="asset-name">
+              <span className={`asset-icon asset-icon-${node.kind}`}><Icon size={16} /></span>
+              <span><strong>{text.label}</strong><small>{text.summary}</small></span>
+            </div>
+            <span><span className="kind-label">{kindLabel(node.kind, language)}</span></span>
+            <div className="row-tags">{node.tags.slice(0, 4).map((tag) => <span key={tag}>{tagLabel(tag, language)}</span>)}</div>
+            <span><HealthBadge health={node.health} language={language} /></span>
+            <span className="source-cell">{nodeEnvironment(node)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AssetsPage({
+  page,
+  snapshot,
+  scope,
+  language,
+}: {
+  page: "skills" | "integrations";
+  snapshot: ObservatorySnapshot;
+  scope: ObservatoryScope;
+  language: Language;
+}) {
+  const copy = ec(language);
+  const [search, setSearch] = useState("");
+  const [tag, setTag] = useState("all");
+  const [kind, setKind] = useState<NodeKind | "all">("all");
+  const [pageNumber, setPageNumber] = useState(1);
+  const scoped = nodesInScope(snapshot, scope);
+  const kinds: NodeKind[] =
+    page === "skills" ? ["skill"] : ["plugin", "hook", "mcp-server"];
+  const filtered = scoped.filter((node) => {
+    if (!kinds.includes(node.kind)) return false;
+    if (kind !== "all" && node.kind !== kind) return false;
+    if (tag !== "all" && !node.tags.includes(tag)) return false;
+    const text = getLocalizedNodeText(node, language);
+    return (
+      !search ||
+      `${text.label} ${text.summary} ${node.tags.join(" ")}`
+        .toLocaleLowerCase()
+        .includes(search.toLocaleLowerCase())
+    );
+  });
+  useEffect(() => setPageNumber(1), [search, tag, kind, scope.environment]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const visible = filtered.slice(
+    (pageNumber - 1) * PAGE_SIZE,
+    pageNumber * PAGE_SIZE,
+  );
+  const placeholder =
+    page === "skills" ? copy.searchSkills : copy.searchIntegrations;
+  return (
+    <>
+      <PageHeader
+        page={page}
+        language={language}
+        actions={<SearchField value={search} onChange={setSearch} placeholder={placeholder} />}
+      />
+      {scope.projectId && <div className="scope-notice"><CircleAlert size={15} />{copy.projectAssetsNotice}</div>}
+      <div className="asset-toolbar">
+        {page === "integrations" && (
+          <div className="kind-filters">
+            <button type="button" className={kind === "all" ? "active" : ""} onClick={() => setKind("all")}>{t(language, "controls", "allKinds")}</button>
+            {kinds.map((candidate) => (
+              <button type="button" key={candidate} className={kind === candidate ? "active" : ""} onClick={() => setKind(candidate)}>
+                {kindLabel(candidate, language)}
+              </button>
+            ))}
+          </div>
+        )}
+        {page === "skills" && (
+          <div className="tag-filters">
+            <button type="button" className={tag === "all" ? "active" : ""} onClick={() => setTag("all")}>{t(language, "controls", "clearFilters")}</button>
+            {PROGRAMMING_TAGS.filter((candidate) => scoped.some((node) => node.tags.includes(candidate))).map((candidate) => (
+              <button type="button" key={candidate} className={tag === candidate ? "active" : ""} onClick={() => setTag(candidate)}>
+                {tagLabel(candidate, language)}
+              </button>
+            ))}
+          </div>
+        )}
+        <span className="result-count">{t(language, "controls", "resultCount", { count: filtered.length })}</span>
+      </div>
+      <section className="wide-table-panel">
+        {visible.length ? <AssetTable nodes={visible} language={language} /> : <EmptyState text={t(language, "states", "noResults")} />}
+      </section>
+      <Pagination page={pageNumber} pageCount={pageCount} language={language} onChange={setPageNumber} />
+    </>
+  );
+}
+
+interface VisualNode {
+  id: string;
+  label: string;
+  sublabel: string;
+  kind: "environment" | "project" | "primary" | "subagent";
+  x: number;
+  y: number;
+  environment?: EnvironmentKind;
+  projectId?: string;
+}
+
+interface VisualEdge {
+  source: string;
+  target: string;
+}
+
+function buildScopeGraph(
+  snapshot: ObservatorySnapshot,
+  scope: ObservatoryScope,
+): { nodes: VisualNode[]; edges: VisualEdge[] } {
+  const projects = projectsInScope(snapshot, scope);
+  const sessions = sessionsInScope(snapshot, scope);
+  if (scope.projectId) {
+    const project = projects[0];
+    if (!project) return { nodes: [], edges: [] };
+    const primary = sessions.filter((session) => session.kind === "primary").slice(0, 12);
+    const subagents = sessions.filter((session) => session.kind === "subagent").slice(0, 28);
+    const nodes: VisualNode[] = [{
+      id: project.id,
+      label: project.label,
+      sublabel: project.environment,
+      kind: "project",
+      x: 80,
+      y: 330,
+      environment: project.environment,
+      projectId: project.id,
+    }];
+    primary.forEach((session, index) => nodes.push({
+      id: session.id,
+      label: session.label,
+      sublabel: session.role,
+      kind: "primary",
+      x: 470,
+      y: 70 + index * Math.min(54, 590 / Math.max(primary.length, 1)),
+      environment: session.environment,
+      projectId: session.projectId,
+    }));
+    subagents.forEach((session, index) => nodes.push({
+      id: session.id,
+      label: session.label,
+      sublabel: session.role,
+      kind: "subagent",
+      x: 900 + (index % 2) * 250,
+      y: 38 + Math.floor(index / 2) * 45,
+      environment: session.environment,
+      projectId: session.projectId,
+    }));
+    const primaryIds = new Set(primary.map((session) => session.id));
+    const edges: VisualEdge[] = [
+      ...primary.map((session) => ({ source: project.id, target: session.id })),
+      ...subagents.map((session) => ({
+        source:
+          session.parentSessionId && primaryIds.has(session.parentSessionId)
+            ? session.parentSessionId
+            : project.id,
+        target: session.id,
+      })),
+    ];
+    return { nodes, edges };
+  }
+
+  const environments = (snapshot.environments ?? []).filter(
+    (environment) =>
+      scope.environment === "all" || environment.id === scope.environment,
+  );
+  const visibleProjects = projects.slice(0, 30);
+  const nodes: VisualNode[] = environments.map((environment, index) => ({
+    id: `environment-${environment.id}`,
+    label: environment.label,
+    sublabel: `${environment.projectCount} projects`,
+    kind: "environment",
+    x: 70,
+    y: 190 + index * 260,
+    environment: environment.id,
+  }));
+  visibleProjects.forEach((project, index) => nodes.push({
+    id: project.id,
+    label: project.label,
+    sublabel: `${project.sessionCount} sessions · ${project.subagentCount} subagents`,
+    kind: "project",
+    x: 420 + (index % 3) * 300,
+    y: 45 + Math.floor(index / 3) * 64,
+    environment: project.environment,
+    projectId: project.id,
+  }));
+  const edges = visibleProjects.map((project) => ({
+    source: `environment-${project.environment}`,
+    target: project.id,
+  }));
+  return { nodes, edges };
+}
+
+function GraphPage({
+  snapshot,
+  scope,
+  language,
+  onScopeChange,
+}: {
+  snapshot: ObservatorySnapshot;
+  scope: ObservatoryScope;
+  language: Language;
+  onScopeChange: (scope: ObservatoryScope) => void;
+}) {
+  const copy = ec(language);
+  const graph = useMemo(() => buildScopeGraph(snapshot, scope), [snapshot, scope]);
+  const positions = new Map(graph.nodes.map((node) => [node.id, node]));
+  return (
+    <>
+      <PageHeader page="graph" language={language} />
+      <section className="graph-page-panel">
+        <div className="graph-page-toolbar">
+          <div><p className="eyebrow">{copy.environmentGraph}</p><h2>{copy.agentHierarchy}</h2></div>
+          <span><Network size={15} />{copy.graphHint}</span>
+        </div>
+        {graph.nodes.length ? (
+          <div className="large-graph-shell">
+            <svg className="large-graph" viewBox="0 0 1400 720" role="img" aria-label={copy.environmentGraph}>
+              <defs>
+                <marker id="scope-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+                  <path d="M 0 0 L 10 5 L 0 10 z" />
+                </marker>
+              </defs>
+              <g className="large-graph-guides">
+                <line x1="280" y1="30" x2="280" y2="690" />
+                <line x1="790" y1="30" x2="790" y2="690" />
+              </g>
+              <g className="large-graph-edges">
+                {graph.edges.map((edge, index) => {
+                  const source = positions.get(edge.source);
+                  const target = positions.get(edge.target);
+                  if (!source || !target) return null;
+                  return <line key={`${edge.source}-${edge.target}-${index}`} x1={source.x + 180} y1={source.y + 25} x2={target.x} y2={target.y + 25} markerEnd="url(#scope-arrow)" />;
+                })}
+              </g>
+              {graph.nodes.map((node) => (
+                <g
+                  key={node.id}
+                  className={`large-graph-node graph-${node.kind} ${node.environment ? `environment-${node.environment}` : ""}`}
+                  transform={`translate(${node.x} ${node.y})`}
+                  role={node.projectId ? "button" : undefined}
+                  tabIndex={node.projectId ? 0 : undefined}
+                  onClick={() => {
+                    if (node.projectId && node.environment) {
+                      onScopeChange({ environment: node.environment, projectId: node.projectId });
+                    }
+                  }}
+                >
+                  <rect width="180" height="50" rx="10" />
+                  <circle cx="18" cy="17" r="4" />
+                  <text x="30" y="20" className="graph-label">
+                    {node.label.length > 22 ? `${node.label.slice(0, 21)}…` : node.label}
+                  </text>
+                  <text x="18" y="37" className="graph-sublabel">
+                    {node.sublabel.length > 30 ? `${node.sublabel.slice(0, 29)}…` : node.sublabel}
+                  </text>
+                </g>
+              ))}
+            </svg>
+          </div>
+        ) : <EmptyState text={copy.noProjectActivity} />}
+      </section>
+    </>
   );
 }
 
 export default function App() {
   const { snapshot, connection, error, refresh } = useSnapshot();
+  const { page, navigate } = usePage();
   const [language, setLanguage] = useState<Language>(() =>
     window.localStorage.getItem("agent-observatory-language") === "en"
       ? "en"
       : "ko",
   );
-  const [search, setSearch] = useState("");
-  const [kind, setKind] = useState<NodeKind | "all">("all");
-  const [tag, setTag] = useState("all");
-  const [programmingOnly, setProgrammingOnly] = useState(false);
-  const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<GraphNode | null>(null);
-  const metrics = useMemo(() => deriveOverview(snapshot), [snapshot]);
+  const [scope, setScope] = useState<ObservatoryScope>({
+    environment: "all",
+    projectId: null,
+  });
+  const copy = ec(language);
 
   useEffect(() => {
     window.localStorage.setItem("agent-observatory-language", language);
     document.documentElement.lang = language;
   }, [language]);
 
-  useEffect(() => setPage(1), [search, kind, tag, programmingOnly]);
+  useEffect(() => {
+    if (
+      scope.projectId &&
+      !(snapshot.projects ?? []).some((project) => project.id === scope.projectId)
+    ) {
+      setScope((current) => ({ ...current, projectId: null }));
+    }
+  }, [snapshot.projects, scope.projectId]);
 
-  const programmingTags = useMemo(
-    () =>
-      PROGRAMMING_TAGS.filter((candidate) =>
-        snapshot.nodes.some((node) => node.tags.includes(candidate)),
-      ),
-    [snapshot.nodes],
+  const currentProject = (snapshot.projects ?? []).find(
+    (project) => project.id === scope.projectId,
   );
-
-  const filteredNodes = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase();
-    return snapshot.nodes.filter((node) => {
-      const localized = getLocalizedNodeText(node, language);
-      const haystack = [
-        node.label,
-        node.summary,
-        localized.label,
-        localized.summary,
-        node.path ?? "",
-        node.source ?? "",
-        ...node.tags,
-        ...node.tags.map((item) => tagLabel(item, language)),
-      ]
-        .join(" ")
-        .toLocaleLowerCase();
-      return (
-        (!query || haystack.includes(query)) &&
-        (kind === "all" || node.kind === kind) &&
-        (tag === "all" || node.tags.includes(tag)) &&
-        (!programmingOnly || Boolean(node.programming))
-      );
-    });
-  }, [snapshot.nodes, search, kind, tag, programmingOnly, language]);
-
-  const pageCount = Math.max(1, Math.ceil(filteredNodes.length / PAGE_SIZE));
-  const pageNodes = filteredNodes.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const observed = new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(snapshot.observedAt));
-
-  const coverage = PROGRAMMING_TAGS.filter((item) => item !== "programming")
-    .map((item) => ({
-      tag: item,
-      count: snapshot.nodes.filter((node) => node.tags.includes(item)).length,
-    }))
-    .filter((item) => item.count > 0)
-    .sort((left, right) => right.count - left.count)
-    .slice(0, 7);
-  const maxCoverage = Math.max(...coverage.map((item) => item.count), 1);
 
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main">
-        {t(language, "navigation", "overview")}
+        {copy.pages[page]}
       </a>
       <header className="topbar">
         <Brand />
-        <nav aria-label={t(language, "navigation", "productName")}>
-          <a className="active" href="#overview">{t(language, "navigation", "overview")}</a>
-          <a href="#graph">{t(language, "navigation", "graph")}</a>
-          <a href="#registry">{t(language, "navigation", "registry")}</a>
+        <nav className="page-tabs" aria-label="Agent Observatory">
+          {PAGE_KEYS.map((key) => {
+            const Icon = pageIcon(key);
+            return (
+              <a
+                key={key}
+                href={`#/${key}`}
+                className={page === key ? "active" : ""}
+                onClick={() => navigate(key)}
+              >
+                <Icon size={15} />
+                {copy.pages[key]}
+              </a>
+            );
+          })}
         </nav>
-        <div className="topbar-actions">
-          <ConnectionBadge connection={connection} language={language} />
-          <button
-            className="language-toggle"
-            type="button"
-            onClick={() => setLanguage((current) => (current === "ko" ? "en" : "ko"))}
-            aria-label={t(language, "language", "toggleLabel")}
-          >
-            <Languages size={16} />
-            {language === "ko" ? "EN" : "한"}
-          </button>
-        </div>
+        {currentProject && (
+          <span className="top-project-label">
+            <FolderGit2 size={14} />
+            {disambiguatedProjectLabel(currentProject, snapshot.projects ?? [])}
+          </span>
+        )}
       </header>
+      <ScopeBar
+        snapshot={snapshot}
+        scope={scope}
+        language={language}
+        connection={connection}
+        onScopeChange={setScope}
+        onLanguageChange={() =>
+          setLanguage((current) => (current === "ko" ? "en" : "ko"))
+        }
+        onRefresh={refresh}
+      />
 
-      <aside className="sidebar">
-        <p>{t(language, "navigation", "workspace")}</p>
-        <a className="active" href="#overview"><Activity size={16} />{t(language, "navigation", "overview")}</a>
-        <a href="#graph"><Network size={16} />{t(language, "navigation", "graphExplorer")}</a>
-        <a href="#registry"><Braces size={16} />{t(language, "navigation", "skillLibrary")}</a>
-        <div className="sidebar-note">
-          <ShieldCheck size={18} />
-          <strong>{t(language, "scan", "readOnlyNotice")}</strong>
-          <span>{t(language, "scan", "sensitiveDataRedacted")}</span>
-        </div>
-      </aside>
-
-      <main id="main">
-        <section className="hero" id="overview">
-          <div>
-            <p className="eyebrow">{t(language, "overview", "eyebrow")}</p>
-            <h1>{t(language, "overview", "title")}</h1>
-            <p>{t(language, "overview", "subtitle")}</p>
-          </div>
-          <div className="hero-actions">
-            <div className="observed-time">
-              <span>{t(language, "timestamps", "observedAt")}</span>
-              <strong>{observed}</strong>
-            </div>
-            <button className="primary-button" type="button" onClick={refresh} disabled={connection === "loading"}>
-              <RefreshCw size={16} className={connection === "loading" ? "is-spinning" : ""} />
-              {connection === "loading" ? t(language, "scan", "scanning") : t(language, "scan", "scanAgain")}
-            </button>
-          </div>
-        </section>
-
+      <main id="main" className="page-main">
         {connection === "fallback" && (
           <div className="fallback-banner" role="status">
             <CircleAlert size={18} />
@@ -468,212 +1057,26 @@ export default function App() {
             </div>
           </div>
         )}
-
-        <section className="metric-strip" aria-label={t(language, "overview", "title")}>
-          {[
-            { label: t(language, "overview", "observedAssets"), value: metrics.totalAssets, icon: Boxes },
-            { label: t(language, "overview", "skills"), value: metrics.skillCount, icon: Braces },
-            { label: t(language, "overview", "programming"), value: metrics.programmingCount, icon: Code2 },
-            { label: t(language, "overview", "plugins"), value: metrics.pluginCount + metrics.hookCount, icon: PlugZap },
-            { label: t(language, "overview", "mcp"), value: metrics.mcpCount, icon: Database },
-          ].map((metric) => (
-            <div className="metric" key={metric.label}>
-              <metric.icon size={17} />
-              <span>{metric.label}</span>
-              <strong>{metric.value.toLocaleString()}</strong>
-            </div>
-          ))}
-        </section>
-
-        <section className="observatory-grid" id="graph">
-          <article className="panel graph-panel">
-            <header className="panel-header">
-              <div>
-                <p className="eyebrow">{t(language, "graph", "relationMap")}</p>
-                <h2>{t(language, "graph", "title")}</h2>
-              </div>
-              <span className="panel-meta">
-                {t(language, "graph", "connectedNodes", { count: snapshot.nodes.length })}
-              </span>
-            </header>
-            <RelationshipGraph
-              snapshot={snapshot}
-              language={language}
-              selectedId={selected?.id ?? null}
-              onSelect={setSelected}
-            />
-          </article>
-
-          <article className="panel coverage-panel">
-            <header className="panel-header">
-              <div>
-                <p className="eyebrow">{t(language, "programming", "label")}</p>
-                <h2>{t(language, "programming", "tag")}</h2>
-              </div>
-              <Code2 size={19} />
-            </header>
-            <div className="coverage-list">
-              {coverage.length ? coverage.map((item) => (
-                <button key={item.tag} type="button" onClick={() => setTag(item.tag)}>
-                  <span>{tagLabel(item.tag, language)}</span>
-                  <span className="coverage-track"><span style={{ width: `${(item.count / maxCoverage) * 100}%` }} /></span>
-                  <strong>{item.count}</strong>
-                </button>
-              )) : (
-                <div className="empty-compact">{t(language, "states", "noResults")}</div>
-              )}
-            </div>
-            <div className="scan-proof">
-              <div><ShieldCheck size={17} /><span>{t(language, "scan", "sensitiveDataRedacted")}</span></div>
-              <div><GitBranch size={17} /><span>{snapshot.source?.scannedPaths.length ?? 0} {t(language, "scan", "scannedPaths")}</span></div>
-              <div><Activity size={17} /><span>{snapshot.source?.scanDurationMs ?? 0} ms</span></div>
-            </div>
-          </article>
-        </section>
-
-        <section className="registry-section" id="registry">
-          <header className="section-header">
-            <div>
-              <p className="eyebrow">{t(language, "registry", "inventory")}</p>
-              <h2>{t(language, "registry", "title")}</h2>
-              <p>{t(language, "registry", "subtitle")}</p>
-            </div>
-            <span className="result-count">{t(language, "controls", "resultCount", { count: filteredNodes.length })}</span>
-          </header>
-
-          <div className="registry-controls">
-            <label className="search-field">
-              <Search size={17} />
-              <span className="sr-only">{t(language, "controls", "search")}</span>
-              <input
-                id="asset-search"
-                name="asset-search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={t(language, "controls", "searchPlaceholder")}
-              />
-              {search && <button type="button" onClick={() => setSearch("")}><X size={15} /></button>}
-            </label>
-            <div className="kind-filters" aria-label={t(language, "controls", "filters")}>
-              {KIND_FILTERS.map((item) => (
-                <button
-                  type="button"
-                  key={item}
-                  className={kind === item ? "active" : ""}
-                  onClick={() => setKind(item)}
-                >
-                  {item === "all" ? t(language, "controls", "allKinds") : kindLabel(item, language)}
-                </button>
-              ))}
-            </div>
-            <label className="programming-toggle">
-              <input
-                id="programming-only"
-                name="programming-only"
-                type="checkbox"
-                checked={programmingOnly}
-                onChange={(event) => setProgrammingOnly(event.target.checked)}
-              />
-              <span>{t(language, "controls", "showProgrammingOnly")}</span>
-            </label>
-          </div>
-
-          {programmingTags.length > 0 && (
-            <div className="tag-filters">
-              <button className={tag === "all" ? "active" : ""} type="button" onClick={() => setTag("all")}>
-                {t(language, "controls", "clearFilters")}
-              </button>
-              {programmingTags.map((item) => (
-                <button className={tag === item ? "active" : ""} type="button" key={item} onClick={() => setTag(item)}>
-                  {tagLabel(item, language)}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className={`registry-layout ${selected ? "has-detail" : ""}`}>
-            <div className="registry-table-wrap">
-              <table className="registry-table">
-                <thead>
-                  <tr>
-                    <th>{t(language, "registry", "name")}</th>
-                    <th>{t(language, "registry", "kind")}</th>
-                    <th>{t(language, "detail", "tags")}</th>
-                    <th>{t(language, "registry", "health")}</th>
-                    <th>{t(language, "registry", "source")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pageNodes.map((node) => {
-                    const Icon = nodeIcon(node.kind);
-                    const text = getLocalizedNodeText(node, language);
-                    return (
-                      <tr key={node.id} className={selected?.id === node.id ? "is-selected" : ""} onClick={() => setSelected(node)}>
-                        <td>
-                          <div className="asset-name">
-                            <span className={`asset-icon asset-icon-${node.kind}`}><Icon size={16} /></span>
-                            <span><strong>{text.label}</strong><small>{text.summary}</small></span>
-                          </div>
-                        </td>
-                        <td><span className="kind-label">{kindLabel(node.kind, language)}</span></td>
-                        <td><div className="row-tags">{node.tags.slice(0, 3).map((item) => <span key={item}>{tagLabel(item, language)}</span>)}</div></td>
-                        <td><HealthBadge health={node.health} language={language} /></td>
-                        <td className="source-cell">{node.source ?? node.origin ?? "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {!pageNodes.length && (
-                <div className="empty-state table-empty">
-                  <Search size={24} />
-                  <strong>{t(language, "states", "noResults")}</strong>
-                  <button type="button" onClick={() => { setSearch(""); setKind("all"); setTag("all"); setProgrammingOnly(false); }}>
-                    {t(language, "controls", "reset")}
-                  </button>
-                </div>
-              )}
-              <footer className="pagination">
-                <span>{t(language, "pagination", "showing", {
-                  from: filteredNodes.length ? (page - 1) * PAGE_SIZE + 1 : 0,
-                  to: Math.min(page * PAGE_SIZE, filteredNodes.length),
-                  total: filteredNodes.length,
-                })}</span>
-                <div>
-                  <button type="button" disabled={page === 1} onClick={() => setPage((value) => value - 1)}><ChevronLeft size={16} /></button>
-                  <span>{t(language, "pagination", "pageOf", { page, total: pageCount })}</span>
-                  <button type="button" disabled={page === pageCount} onClick={() => setPage((value) => value + 1)}><ChevronRight size={16} /></button>
-                </div>
-              </footer>
-            </div>
-            {selected && <NodeDetail node={selected} language={language} onClose={() => setSelected(null)} />}
-          </div>
-        </section>
-
-        <section className="findings-section">
-          <header className="section-header">
-            <div>
-              <p className="eyebrow">{t(language, "findings", "title")}</p>
-              <h2>{t(language, "findings", "subtitle")}</h2>
-            </div>
-            <Sparkles size={19} />
-          </header>
-          <div className="finding-list">
-            {snapshot.findings.length ? snapshot.findings.slice(0, 4).map((finding) => {
-              const text = localizedFinding(finding, language);
-              return (
-                <article key={finding.id}>
-                  {finding.severity === "info" ? <CheckCircle2 size={18} /> : <CircleAlert size={18} />}
-                  <div><strong>{text.title}</strong><p>{text.detail}</p></div>
-                  <span>{text.action}</span>
-                </article>
-              );
-            }) : (
-              <div className="empty-state"><CheckCircle2 size={24} /><strong>{t(language, "findings", "noFindings")}</strong><span>{t(language, "findings", "noFindingsDescription")}</span></div>
-            )}
-          </div>
-        </section>
+        {page === "overview" && (
+          <OverviewPage snapshot={snapshot} scope={scope} language={language} navigate={navigate} onScopeChange={setScope} />
+        )}
+        {page === "projects" && (
+          <ProjectsPage snapshot={snapshot} scope={scope} language={language} navigate={navigate} onScopeChange={setScope} />
+        )}
+        {page === "agents" && (
+          <AgentsPage snapshot={snapshot} scope={scope} language={language} />
+        )}
+        {(page === "skills" || page === "integrations") && (
+          <AssetsPage page={page} snapshot={snapshot} scope={scope} language={language} />
+        )}
+        {page === "graph" && (
+          <GraphPage snapshot={snapshot} scope={scope} language={language} onScopeChange={setScope} />
+        )}
       </main>
+      <footer className="app-footer">
+        <span><ShieldCheck size={14} />{copy.liveMetadataOnly}</span>
+        <span>Agent Observatory · local only</span>
+      </footer>
     </div>
   );
 }

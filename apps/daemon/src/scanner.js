@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { inferProgrammingTags } from "./tags.js";
 import { localizeAsset } from "./localization.js";
+import { scanEnvironments } from "./environment-scanner.js";
 
 const CONFIG_EXTENSIONS = new Set([".json", ".toml", ".yaml", ".yml"]);
 const AGENT_EXTENSIONS = new Set([".json", ".toml", ".yaml", ".yml", ".md"]);
@@ -715,6 +716,10 @@ export async function scanObservatory(options = {}) {
     options.codexRoot ||
     process.env.AGENT_OBSERVATORY_CODEX_HOME ||
     path.join(os.homedir(), ".codex");
+  const claudeRoot =
+    options.claudeRoot ||
+    process.env.AGENT_OBSERVATORY_CLAUDE_HOME ||
+    path.join(os.homedir(), ".claude");
   const agentsRoot =
     options.agentsRoot ||
     process.env.AGENT_OBSERVATORY_AGENTS_HOME ||
@@ -722,11 +727,13 @@ export async function scanObservatory(options = {}) {
 
   const rootSpecs = [
     { name: "codex", path: path.resolve(codexRoot) },
+    { name: "claude", path: path.resolve(claudeRoot) },
     { name: "agents", path: path.resolve(agentsRoot) },
   ];
-  const scans = await Promise.all(
-    rootSpecs.map((root) => walkRoot(root.name, root.path)),
-  );
+  const [scans, environmentData] = await Promise.all([
+    Promise.all(rootSpecs.map((root) => walkRoot(root.name, root.path))),
+    scanEnvironments({ codexRoot, claudeRoot }),
+  ]);
   const collector = createCollector();
   const scannedPaths = new Set();
   const pendingHookEdges = [];
@@ -938,9 +945,13 @@ export async function scanObservatory(options = {}) {
     nodes,
     edges,
     findings,
+    environments: environmentData.environments,
+    projects: environmentData.projects,
+    sessions: environmentData.sessions,
     source: {
       codexRoot: "codex",
       agentsRoot: "agents",
+      claudeRoot: "claude",
       scannedPaths: [...scannedPaths].sort(),
       scanDurationMs: Math.max(0, Date.now() - startedAt),
       redactedFields: REDACTED_FIELDS,

@@ -46,7 +46,7 @@ export interface GraphNode {
   version?: string;
   risk?: RiskLevel;
   path?: string;
-  origin?: "codex" | "agents" | "plugin-cache" | "config" | "fixture";
+  origin?: "codex" | "claude" | "agents" | "plugin-cache" | "config" | "fixture";
   enabled?: boolean;
   programming?: boolean;
   metadata?: Record<string, string | number | boolean | string[]>;
@@ -73,9 +73,43 @@ export interface Finding {
   };
 }
 
+export type EnvironmentKind = "codex" | "claude" | "other";
+
+export interface EnvironmentRecord {
+  id: EnvironmentKind;
+  label: string;
+  installed: boolean;
+  capabilities: string[];
+  projectCount: number;
+  sessionCount: number;
+  subagentCount: number;
+}
+
+export interface ProjectRecord {
+  id: string;
+  environment: EnvironmentKind;
+  label: string;
+  pathLabel: string;
+  sessionCount: number;
+  subagentCount: number;
+  lastObservedAt: string;
+}
+
+export interface AgentSessionRecord {
+  id: string;
+  environment: EnvironmentKind;
+  projectId: string;
+  kind: "primary" | "subagent";
+  parentSessionId?: string;
+  label: string;
+  role: string;
+  observedAt: string;
+  source: string;
+}
 export interface SnapshotSource {
   codexRoot: string;
   agentsRoot: string;
+  claudeRoot?: string;
   scannedPaths: string[];
   scanDurationMs: number;
   redactedFields: string[];
@@ -87,6 +121,9 @@ export interface ObservatorySnapshot {
   nodes: GraphNode[];
   edges: GraphEdge[];
   findings: Finding[];
+  environments?: EnvironmentRecord[];
+  projects?: ProjectRecord[];
+  sessions?: AgentSessionRecord[];
   source?: SnapshotSource;
 }
 

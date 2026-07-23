@@ -1,50 +1,56 @@
 # Agent Observatory
 
 Agent Observatory is a local-first desktop web control plane for understanding
-Codex agents, skills, plugins, hooks, and MCP servers.
+AI coding environments, projects, agent sessions, subagents, skills, plugins,
+hooks, and MCP servers.
 
-The MVP scans the user's local Codex installation, removes sensitive values,
-classifies programming skills, and presents the result in Korean or English.
-Finance is the planned first domain expansion after the programming registry.
+The current release observes both **Codex** and **Claude** installations. It
+maps their different local layouts into one safe environment → project →
+session → subagent model without returning conversation content.
 
-## MVP capabilities
+## Current capabilities
 
-- Loopback-only local daemon for `~/.codex` and `~/.agents`
-- Skill, agent, plugin, hook, and MCP inventory
+- Codex and Claude environment detection
+- Global, environment, and project scope selection
+- Local project history with session and subagent counts
+- Codex parent/subagent mapping from safe session metadata
+- Claude project and nested workflow/subagent mapping
+- Dedicated full-width pages for Overview, Projects, Agents, Skills,
+  Integrations, and Graph
+- Environment-aware skill, plugin, hook, and MCP inventory
 - Programming tags for frontend, backend, infrastructure, DevOps, cloud,
   database, testing, security, mobile, data/AI, API, Git, tooling,
   documentation, and design systems
-- Search and filters across Korean and English labels, summaries, kinds, and
-  tags
-- Relationship graph, health counts, findings, and scan provenance
-- Explicit live/fallback state so demo data is never mistaken for local data
-- Secret-safe response contract: values, commands, arguments, URLs, tokens,
-  hashes, and environment contents are not returned
+- Korean and English interface and asset summaries
+- Explicit live/fallback state
+- Secret-safe output: prompts, messages, descriptions, commands, arguments,
+  URLs, tokens, credentials, environment values, usernames, and full home paths
+  are not returned
 
 ## Design
 
 The dashboard is a white, desktop-first observatory inspired by the clarity and
 spacing of the public [ElevenLabs](https://elevenlabs.io/) website without
-copying its branding, copy, or composition. A single relationship map is the
-visual signature; the surrounding interface remains quiet and operational.
+copying its branding or composition. Each major information domain has its own
+large page instead of competing inside one dense dashboard.
 
 ## Repository layout
 
 ```text
 apps/
-  dashboard/       React + Vite observatory
-  daemon/          Loopback-only local scanner API
+  dashboard/       React + Vite multi-page observatory
+  daemon/          Loopback-only environment and asset scanner API
 packages/
-  core/            Graph, metrics, similarity, and taxonomy contracts
-  finance/         Future finance domain guardrails
+  core/            Graph, environment, project, session, and taxonomy contracts
+  finance/         Future finance-domain guardrails
 docs/              Architecture, product, design, and domain notes
 obsidian/          Durable project memory and work log
 ```
 
 ## Run locally
 
-See [SETUP.md](./SETUP.md) for paths, optional keys, security boundaries, and
-verification.
+See [SETUP.md](./SETUP.md) for path overrides, optional keys, and the privacy
+boundary.
 
 ```bash
 npm install
@@ -67,7 +73,8 @@ npm test
 npm run build
 ```
 
-## Project memory
+## Next expansion
 
-Architecture decisions and work history are kept as Obsidian-compatible
-Markdown in `obsidian/`.
+Add adapters for more agent environments through the same contract, then layer
+explainable similarity and finance-domain policy checks onto the environment
+and project scopes.
