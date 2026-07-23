@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import {
   Activity,
   ArrowRight,
@@ -56,6 +56,8 @@ const graphPositions: Record<string, [number, number]> = {
 const kindLabel: Record<GraphNode["kind"], string> = {
   agent: "Agent",
   skill: "Skill",
+  plugin: "Plugin",
+  hook: "Hook",
   "mcp-server": "MCP",
   "mcp-tool": "Tool",
   provider: "Provider",
@@ -180,7 +182,7 @@ function MetricStrip({
     {
       label: "Observed assets",
       value: metrics.totalAssets,
-      note: "3 agents · 5 skills · 3 MCPs",
+      note: "3 agents 쨌 5 skills 쨌 3 MCPs",
       accent: "neutral",
     },
     {
@@ -354,12 +356,12 @@ export function App() {
             <div className="hero-copy">
               <span className="eyebrow">
                 <Activity size={15} />
-                Local system · observed 42 seconds ago
+                Local system 쨌 observed 42 seconds ago
               </span>
               <h1>Your agent system,<br />at a glance.</h1>
               <p>
                 See every agent, skill, and MCP connection in one explainable
-                control plane—before you install, remove, or trust it.
+                control plane?봟efore you install, remove, or trust it.
               </p>
             </div>
             <div className="hero-actions">
@@ -506,4 +508,6 @@ export function App() {
     </div>
   );
 }
+
+
 

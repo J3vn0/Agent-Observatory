@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { deriveOverview, explainSimilarity } from "@agent-observatory/core";
 import { fixture } from "./data/fixture";
 
@@ -10,6 +10,12 @@ describe("observatory overview", () => {
       disconnectedCount: 1,
       overlapCount: 1,
       financeCoveragePercent: 67,
+      agentCount: 3,
+      skillCount: 5,
+      pluginCount: 0,
+      hookCount: 0,
+      mcpCount: 3,
+      programmingCount: 0,
     });
   });
 
@@ -25,6 +31,4 @@ describe("observatory overview", () => {
     expect(result.sharedDependencies).toEqual(["skill-etf"]);
   });
 });
-
-
 

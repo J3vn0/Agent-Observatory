@@ -1,6 +1,8 @@
 export type NodeKind =
   | "agent"
   | "skill"
+  | "plugin"
+  | "hook"
   | "mcp-server"
   | "mcp-tool"
   | "provider"
@@ -12,6 +14,7 @@ export type NodeKind =
   | "tag";
 
 export type HealthState = "healthy" | "attention" | "critical" | "unknown";
+export type RiskLevel = "low" | "medium" | "high";
 export type EdgeKind =
   | "USES"
   | "REQUIRES"
@@ -23,6 +26,11 @@ export type EdgeKind =
   | "READS_FROM"
   | "WRITES_TO";
 
+export interface LocalizedText {
+  en: string;
+  ko: string;
+}
+
 export interface GraphNode {
   id: string;
   label: string;
@@ -30,9 +38,18 @@ export interface GraphNode {
   health: HealthState;
   summary: string;
   tags: string[];
+  localized?: {
+    label?: LocalizedText;
+    summary: LocalizedText;
+  };
   source?: string;
   version?: string;
-  risk?: "low" | "medium" | "high";
+  risk?: RiskLevel;
+  path?: string;
+  origin?: "codex" | "agents" | "plugin-cache" | "config" | "fixture";
+  enabled?: boolean;
+  programming?: boolean;
+  metadata?: Record<string, string | number | boolean | string[]>;
 }
 
 export interface GraphEdge {
@@ -49,6 +66,19 @@ export interface Finding {
   title: string;
   detail: string;
   action: string;
+  localized?: {
+    title: LocalizedText;
+    detail: LocalizedText;
+    action: LocalizedText;
+  };
+}
+
+export interface SnapshotSource {
+  codexRoot: string;
+  agentsRoot: string;
+  scannedPaths: string[];
+  scanDurationMs: number;
+  redactedFields: string[];
 }
 
 export interface ObservatorySnapshot {
@@ -57,6 +87,7 @@ export interface ObservatorySnapshot {
   nodes: GraphNode[];
   edges: GraphEdge[];
   findings: Finding[];
+  source?: SnapshotSource;
 }
 
 export interface OverviewMetrics {
@@ -65,6 +96,12 @@ export interface OverviewMetrics {
   disconnectedCount: number;
   overlapCount: number;
   financeCoveragePercent: number;
+  agentCount: number;
+  skillCount: number;
+  pluginCount: number;
+  hookCount: number;
+  mcpCount: number;
+  programmingCount: number;
 }
 
 export interface SimilarityEvidence {
@@ -129,8 +166,15 @@ export function explainSimilarity(
 }
 
 export function deriveOverview(snapshot: ObservatorySnapshot): OverviewMetrics {
+  const operationalKinds: NodeKind[] = [
+    "agent",
+    "skill",
+    "plugin",
+    "hook",
+    "mcp-server",
+  ];
   const operationalNodes = snapshot.nodes.filter((node) =>
-    ["agent", "skill", "mcp-server"].includes(node.kind),
+    operationalKinds.includes(node.kind),
   );
   const healthyCount = operationalNodes.filter(
     (node) => node.health === "healthy",
@@ -150,6 +194,8 @@ export function deriveOverview(snapshot: ObservatorySnapshot): OverviewMetrics {
   const activeFinanceCapabilities = financeCapabilities.filter(
     (node) => node.health === "healthy",
   );
+  const countKind = (kind: NodeKind) =>
+    snapshot.nodes.filter((node) => node.kind === kind).length;
 
   return {
     totalAssets: operationalNodes.length,
@@ -163,6 +209,12 @@ export function deriveOverview(snapshot: ObservatorySnapshot): OverviewMetrics {
           (activeFinanceCapabilities.length / financeCapabilities.length) * 100,
         )
       : 0,
+    agentCount: countKind("agent"),
+    skillCount: countKind("skill"),
+    pluginCount: countKind("plugin"),
+    hookCount: countKind("hook"),
+    mcpCount: countKind("mcp-server"),
+    programmingCount: snapshot.nodes.filter((node) => node.programming).length,
   };
 }
 
