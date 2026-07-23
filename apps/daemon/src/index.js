@@ -2,9 +2,11 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { scanObservatory } from "./scanner.js";
+import { loadLocalEnv } from "./env.js";
 
 const HOST = "127.0.0.1";
 const DEFAULT_PORT = 4317;
+const SNAPSHOT_CACHE_MS = 2_000;
 
 const json = (response, statusCode, body) => {
   response.writeHead(statusCode, {
@@ -25,6 +27,31 @@ const requestPath = (request) => {
 
 export function createDaemon(options = {}) {
   const scanner = options.scanner || scanObservatory;
+  let cachedSnapshot = null;
+  let cachedAt = 0;
+  let pendingSnapshot = null;
+
+  const observe = async () => {
+    const now = Date.now();
+    if (cachedSnapshot && now - cachedAt < SNAPSHOT_CACHE_MS) {
+      return cachedSnapshot;
+    }
+    if (!pendingSnapshot) {
+      pendingSnapshot = scanner({
+        codexRoot: options.codexRoot,
+        agentsRoot: options.agentsRoot,
+      })
+        .then((snapshot) => {
+          cachedSnapshot = snapshot;
+          cachedAt = Date.now();
+          return snapshot;
+        })
+        .finally(() => {
+          pendingSnapshot = null;
+        });
+    }
+    return pendingSnapshot;
+  };
 
   return http.createServer(async (request, response) => {
     const pathname = requestPath(request);
@@ -39,11 +66,7 @@ export function createDaemon(options = {}) {
     }
     if (pathname === "/api/snapshot") {
       try {
-        const snapshot = await scanner({
-          codexRoot: options.codexRoot,
-          agentsRoot: options.agentsRoot,
-        });
-        json(response, 200, snapshot);
+        json(response, 200, await observe());
       } catch {
         json(response, 500, { error: "Snapshot unavailable" });
       }
@@ -82,6 +105,7 @@ const isMain =
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isMain) {
+  await loadLocalEnv();
   const server = await startDaemon();
   const address = server.address();
   const port =

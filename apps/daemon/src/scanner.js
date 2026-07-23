@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { inferProgrammingTags } from "./tags.js";
+import { localizeAsset } from "./localization.js";
 
 const CONFIG_EXTENSIONS = new Set([".json", ".toml", ".yaml", ".yml"]);
 const AGENT_EXTENSIONS = new Set([".json", ".toml", ".yaml", ".yml", ".md"]);
@@ -688,6 +689,7 @@ const makeNode = (record, id) => {
     kind: record.kind,
     health: record.enabled ? "healthy" : "attention",
     summary: summaries[record.kind],
+    localized: localizeAsset(record.kind, record.name),
     tags,
     source:
       record.kind === "mcp-server"

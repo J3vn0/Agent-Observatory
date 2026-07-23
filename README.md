@@ -1,69 +1,65 @@
 # Agent Observatory
 
-Agent Observatory is a local-first control plane for understanding, comparing, and operating AI agents, skills, and MCP servers.
+Agent Observatory is a local-first desktop web control plane for understanding
+Codex agents, skills, plugins, hooks, and MCP servers.
 
-The first domain expansion is **Finance**, with explicit provenance, freshness, permissions, and read-only safety boundaries.
+The MVP scans the user's local Codex installation, removes sensitive values,
+classifies programming skills, and presents the result in Korean or English.
+Finance is the planned first domain expansion after the programming registry.
 
-## Product shape
+## MVP capabilities
 
-- A desktop-first browser dashboard for graph exploration, health, overlap, and capability coverage
-- A local daemon that discovers agent, skill, and MCP configuration
-- An explainable similarity engine for agents and skills
-- Domain packs, starting with finance
-- Obsidian-compatible project memory in `obsidian/`
+- Loopback-only local daemon for `~/.codex` and `~/.agents`
+- Skill, agent, plugin, hook, and MCP inventory
+- Programming tags for frontend, backend, infrastructure, DevOps, cloud,
+  database, testing, security, mobile, data/AI, API, Git, tooling,
+  documentation, and design systems
+- Search and filters across Korean and English labels, summaries, kinds, and
+  tags
+- Relationship graph, health counts, findings, and scan provenance
+- Explicit live/fallback state so demo data is never mistaken for local data
+- Secret-safe response contract: values, commands, arguments, URLs, tokens,
+  hashes, and environment contents are not returned
 
-## Design direction
+## Design
 
-The dashboard uses a white, editorial SaaS interface inspired by the clarity of the public [ElevenLabs](https://elevenlabs.io/) website:
-
-- generous white space and large sans-serif hierarchy
-- black primary actions and thin neutral borders
-- connected desktop metric strips instead of mobile-style cards
-- restrained color through Agent Observatory’s own graph-orb motif
-
-The implementation does not copy ElevenLabs branding, imagery, copy, or page composition.
+The dashboard is a white, desktop-first observatory inspired by the clarity and
+spacing of the public [ElevenLabs](https://elevenlabs.io/) website without
+copying its branding, copy, or composition. A single relationship map is the
+visual signature; the surrounding interface remains quiet and operational.
 
 ## Repository layout
 
 ```text
 apps/
-  dashboard/       React + Vite desktop web control plane
+  dashboard/       React + Vite observatory
+  daemon/          Loopback-only local scanner API
 packages/
-  core/            Graph model, metrics, and similarity contracts
-  finance/         Finance domain tags, evidence, and guardrails
-docs/
-  architecture/    Local-first system design
-  design/          Dashboard specification
-  finance/         Finance domain-pack specification
-  product/         Product brief and milestones
+  core/            Graph, metrics, similarity, and taxonomy contracts
+  finance/         Future finance domain guardrails
+docs/              Architecture, product, design, and domain notes
 obsidian/          Durable project memory and work log
-design-system/     Persisted UI design decisions
 ```
 
-## Implemented vertical slice
+## Run locally
 
-The current fixture-based dashboard:
-
-1. Loads a typed snapshot describing agents, skills, MCP servers, and connections.
-2. Shows system health, capability coverage, and disconnected assets.
-3. Presents a relationship graph and integration-health table.
-4. Explains agent similarity using shared tags and dependencies.
-5. Applies finance-specific provenance, freshness, citation, and read-only guardrails.
-
-The UI is deliberately labeled `Demo fixture`; it does not yet inspect real local configuration.
-
-## Local development
-
-Requirements: Node.js 20 or later.
+See [SETUP.md](./SETUP.md) for paths, optional keys, security boundaries, and
+verification.
 
 ```bash
 npm install
-npm run dev
+npm run dev:daemon
 ```
 
-The dashboard runs at `http://127.0.0.1:4173`.
+In another terminal:
 
-## Verification
+```bash
+npm run dev:dashboard
+```
+
+Open `http://127.0.0.1:4173`.
+
+## Verify
 
 ```bash
 npm run typecheck
@@ -71,9 +67,7 @@ npm test
 npm run build
 ```
 
-The current UI has been browser-verified at 1440×1000, 1024×900, and 390×844.
+## Project memory
 
-## Next milestone
-
-Implement the local daemon adapter contract and first Codex scanner, then replace the fixture with a real `ObservatorySnapshot` endpoint.
-
+Architecture decisions and work history are kept as Obsidian-compatible
+Markdown in `obsidian/`.

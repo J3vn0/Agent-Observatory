@@ -218,3 +218,4 @@ export function deriveOverview(snapshot: ObservatorySnapshot): OverviewMetrics {
   };
 }
 
+export * from "./taxonomy";
