@@ -61,7 +61,7 @@ No configuration values were printed or written to project memory.
 - [x] Console has no errors, warnings, or accessibility issues
 - [x] Typecheck, 13 tests, and production build pass
 - [x] `SETUP.md` documents paths, keys, and security boundary
-- [ ] Main branch pushed to GitHub
+- [x] Main branch pushed to GitHub
 
 ## Worktree roles
 
