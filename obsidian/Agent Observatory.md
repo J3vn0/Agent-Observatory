@@ -61,21 +61,47 @@ The finance pack starts with ETF, bond, filing, and macro-research workflows. It
 
 ## Worktree model
 
-| Branch | Worktree role | Ownership |
-|---|---|---|
-| `main` | Integration and dashboard implementation | Lead agent |
-| `agent/product` | Product brief and milestones | Product subagent |
-| `agent/architecture` | System architecture and contracts | Architecture subagent |
-| `agent/finance` | Finance domain pack and safety model | Finance subagent |
+| Branch | Worktree role | Ownership | Result |
+|---|---|---|---|
+| `main` | Integration and dashboard implementation | Lead agent | Active |
+| `agent/product` | Product brief and milestones | Product subagent | `f13ff40`, merged |
+| `agent/architecture` | System architecture and contracts | Architecture subagent | `dacabb9`, merged |
+| `agent/finance` | Finance domain pack and safety model | Finance subagent | `c5a080b`, merged |
+
+## Implemented vertical slice
+
+- npm workspace with `apps/dashboard`, `packages/core`, and `packages/finance`
+- React + Vite dashboard
+- Typed graph node, edge, finding, and snapshot contracts
+- Deterministic and explainable tag/dependency similarity
+- Fixture inventory for agents, skills, and MCP servers
+- Relationship graph with health states
+- Finance guardrail posture for read-only tools, freshness, and citations
+- Integration filtering for all assets or finance assets
+- Responsive 1440px and 390px layouts
+
+## Validation
+
+- `npm run typecheck`: passed
+- `npm test`: 2 tests passed
+- `npm run build`: passed
+- Browser console errors/warnings: none
+- Browser network 4xx/5xx: none
+- Mobile document horizontal overflow: false
+- Reduced-motion CSS: included
+- Current data mode: explicit `Demo fixture`
 
 ## Current status
 
 - [x] Product direction selected
 - [x] Durable Obsidian memory created
-- [ ] Git repository initialized
-- [ ] Worktrees created
-- [ ] Parallel design documents merged
-- [ ] Dashboard vertical slice running
+- [x] Git repository initialized
+- [x] Worktrees created
+- [x] Parallel design documents merged
+- [x] Dashboard vertical slice running
+- [ ] Local daemon scanner reads real Codex/Claude/Cursor configuration
+- [ ] SQLite graph persistence
+- [ ] Real MCP health probes
 
 ## Decisions
 
@@ -83,15 +109,22 @@ The finance pack starts with ETF, bond, filing, and macro-research workflows. It
 - 2026-07-23: Use graph relationships for explainable similarity and compatibility.
 - 2026-07-23: Prefer local-first discovery so configuration and credentials remain on the user's machine.
 - 2026-07-23: Persist UI design-system output in the repository.
+- 2026-07-23: Start with deterministic similarity based on shared tags and dependencies before optional embeddings.
+- 2026-07-23: Label fixtures explicitly so simulated observation data cannot be mistaken for live state.
 
 ## Working links
 
 - [[Work Log/2026-07-23]]
+- Product brief: `docs/product/PRODUCT_BRIEF.md`
+- Architecture: `docs/architecture/ARCHITECTURE.md`
+- Finance pack: `docs/finance/FINANCE_PACK.md`
+- Dashboard specification: `docs/design/DASHBOARD_SPEC.md`
 
 ## Next actions
 
-1. Initialize Git and create the baseline commit.
-2. Create role-specific worktrees.
-3. Run product, architecture, and finance subagents in parallel.
-4. Implement the dashboard fixture and main observability views.
+1. Implement the daemon adapter contract and Codex scanner.
+2. Persist normalized observations in SQLite.
+3. Replace the fixture with the daemon snapshot endpoint.
+4. Add MCP stdio/HTTP health probes without exposing credential values.
+5. Implement the Skill Library and evidence-first Compare views.
 

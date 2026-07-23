@@ -16,26 +16,51 @@ The first domain expansion is **Finance**, with explicit provenance, freshness, 
 
 ```text
 apps/
-  dashboard/       Web control plane
-  daemon/          Local discovery and health service
+  dashboard/       React + Vite web control plane
 packages/
-  core/            Graph model and shared contracts
-  finance/         Finance domain pack
-docs/              Product and architecture documents
+  core/            Graph model, metrics, and similarity contracts
+  finance/         Finance domain tags, evidence, and guardrails
+docs/
+  architecture/    Local-first system design
+  design/          Dashboard specification
+  finance/         Finance domain-pack specification
+  product/         Product brief and milestones
 obsidian/          Durable project memory and work log
 design-system/     Persisted UI design decisions
 ```
 
-## Initial milestone
+## Implemented vertical slice
 
-The first vertical slice will:
+The current fixture-based dashboard:
 
-1. Load a local fixture describing agents, skills, MCP servers, and connections.
-2. Show system health, capability coverage, and duplicate-risk summaries.
-3. Present an integration matrix and relationship graph.
-4. Apply finance-specific tags and safety signals.
+1. Loads a typed snapshot describing agents, skills, MCP servers, and connections.
+2. Shows system health, capability coverage, and disconnected assets.
+3. Presents a relationship graph and integration-health table.
+4. Explains agent similarity using shared tags and dependencies.
+5. Applies finance-specific provenance, freshness, citation, and read-only guardrails.
+
+The UI is deliberately labeled `Demo fixture`; it does not yet inspect real local configuration.
 
 ## Local development
 
-Development commands will be added as the dashboard and daemon packages land.
+Requirements: Node.js 20 or later.
+
+```bash
+npm install
+npm run dev
+```
+
+The dashboard runs at `http://127.0.0.1:4173`.
+
+## Verification
+
+```bash
+npm run typecheck
+npm test
+npm run build
+```
+
+## Next milestone
+
+Implement the local daemon adapter contract and first Codex scanner, then replace the fixture with a real `ObservatorySnapshot` endpoint.
 
