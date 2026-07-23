@@ -7,7 +7,7 @@ tags:
   - domain/finance
   - status/active
 created: 2026-07-23
-updated: 2026-07-23
+updated: 2026-07-24
 ---
 
 # Agent Observatory
@@ -91,6 +91,9 @@ The finance pack starts with ETF, bond, filing, and macro-research workflows. It
 - Finance guardrail posture for read-only tools, freshness, and citations
 - Integration filtering for all assets or finance assets
 - Responsive support at 1024px and 390px
+- Agent Registry with deterministic, field-level similarity evidence
+- Cross-project global promotion candidates with read-only planning
+- Primary execution sessions excluded from agent-definition identity
 
 ## Validation
 
@@ -116,7 +119,8 @@ The finance pack starts with ETF, bond, filing, and macro-research workflows. It
 - [x] Parallel design documents merged
 - [x] Dashboard vertical slice running
 - [x] White desktop-first UI redesign verified
-- [ ] Local daemon scanner reads real Codex/Claude/Cursor configuration
+- [x] Local daemon scanner reads real Codex and Claude metadata
+- [x] Project-agent duplicate detection and global promotion preview
 - [ ] SQLite graph persistence
 - [ ] Real MCP health probes
 
@@ -130,6 +134,8 @@ The finance pack starts with ETF, bond, filing, and macro-research workflows. It
 - 2026-07-23: Label fixtures explicitly so simulated observation data cannot be mistaken for live state.
 - 2026-07-23: Make desktop web the primary dashboard canvas.
 - 2026-07-23: Replace the initial dark operations style with a white editorial interface.
+- 2026-07-24: Separate primary execution sessions from promotable subagent definitions.
+- 2026-07-24: Keep promotion read-only until approval and reversible execution are designed.
 
 ## Working links
 
@@ -146,5 +152,6 @@ The finance pack starts with ETF, bond, filing, and macro-research workflows. It
 2. Persist normalized observations in SQLite.
 3. Replace the fixture with the daemon snapshot endpoint.
 4. Add MCP stdio/HTTP health probes without exposing credential values.
-5. Implement the Skill Library and evidence-first Compare views.
+5. Extend the Registry evidence model to skill similarity and customization.
+6. Add reversible, approval-gated global-agent promotion execution.
 

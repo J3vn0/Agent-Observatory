@@ -12,6 +12,7 @@ import {
   Database,
   FolderGit2,
   GitBranch,
+  GitMerge,
   Globe2,
   Languages,
   LayoutDashboard,
@@ -41,6 +42,7 @@ import {
   type ProjectRecord,
 } from "@agent-observatory/core";
 import { ec } from "./environment-copy";
+import { AgentRegistryPage } from "./AgentRegistryPage";
 import {
   disambiguatedProjectLabel,
   nodeEnvironment,
@@ -61,6 +63,7 @@ type PageKey =
   | "overview"
   | "projects"
   | "agents"
+  | "registry"
   | "skills"
   | "integrations"
   | "graph";
@@ -69,6 +72,7 @@ const PAGE_KEYS: PageKey[] = [
   "overview",
   "projects",
   "agents",
+  "registry",
   "skills",
   "integrations",
   "graph",
@@ -129,6 +133,7 @@ function pageIcon(page: PageKey): LucideIcon {
     overview: LayoutDashboard,
     projects: FolderGit2,
     agents: Bot,
+    registry: GitMerge,
     skills: Braces,
     integrations: PlugZap,
     graph: Network,
@@ -1065,6 +1070,9 @@ export default function App() {
         )}
         {page === "agents" && (
           <AgentsPage snapshot={snapshot} scope={scope} language={language} />
+        )}
+        {page === "registry" && (
+          <AgentRegistryPage snapshot={snapshot} scope={scope} language={language} />
         )}
         {(page === "skills" || page === "integrations") && (
           <AssetsPage page={page} snapshot={snapshot} scope={scope} language={language} />

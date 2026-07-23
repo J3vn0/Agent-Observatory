@@ -256,3 +256,5 @@ export function deriveOverview(snapshot: ObservatorySnapshot): OverviewMetrics {
 }
 
 export * from "./taxonomy";
+
+export * from "./agent-registry";

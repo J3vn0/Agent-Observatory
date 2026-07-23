@@ -40,6 +40,7 @@ single, understandable map.
 | **Overview** | Environment health, project totals, sessions, subagents, skills, and plugins |
 | **Projects** | Local project history with per-project session and subagent counts |
 | **Agents** | Primary-session and subagent hierarchy, roles, parents, and observation times |
+| **Registry** | Explainable duplicate detection and cross-project global-agent promotion preview |
 | **Skills** | Searchable skill registry with frontend, backend, cloud, security, data/AI, and other tags |
 | **Integrations** | Plugin, hook, and MCP server inventory with health and source information |
 | **Graph** | Large relationship canvas from environment to project, session, and subagent |
@@ -165,7 +166,7 @@ obsidian/          Durable project memory and work logs
 
 ## Current status
 
-**v0.3.0 — Multi-environment project observability**
+**v0.4.0 — Agent Registry and promotion preview**
 
 - [x] Codex and Claude environment adapters
 - [x] Global, environment, and project scopes
@@ -173,7 +174,9 @@ obsidian/          Durable project memory and work logs
 - [x] Tagged skill and integration registries
 - [x] Responsive Korean and English dashboard
 - [x] Secret-safe local snapshot contract
-- [ ] Explainable agent and skill similarity
+- [x] Explainable project-agent similarity and promotion candidates
+- [ ] Explainable skill similarity
+- [ ] Guided, reversible promotion execution
 - [ ] Guided skill customization and lifecycle management
 - [ ] Additional environment adapters
 - [ ] Read-only finance observability pack
