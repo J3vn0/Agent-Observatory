@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.vite/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+
+# Local references and generated runtime state
+refs/
+.agent-observatory/
+
+# Obsidian workspace state
+obsidian/.obsidian/workspace.json
+obsidian/.obsidian/workspace-mobile.json
+

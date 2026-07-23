@@ -1,0 +1,20 @@
+{
+  "name": "agent-observatory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first observability and lifecycle management for agents, skills, and MCP servers.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspace @agent-observatory/dashboard",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
+
