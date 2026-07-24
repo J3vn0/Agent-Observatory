@@ -1,9 +1,15 @@
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { scanObservatory } from "./scanner.js";
 import { loadLocalEnv } from "./env.js";
 import { ActionError, createActionManager, isAllowedLocalOrigin, readJsonBody } from "./actions.js";
+import {
+  ADOPTION_APPROVAL_HEADER,
+  AdoptionError,
+  createAdoptionManager,
+} from "./adoptions.js";
 
 const HOST = "127.0.0.1";
 const DEFAULT_PORT = 4317;
@@ -35,6 +41,9 @@ export function createDaemon(options = {}) {
     codexRoot: options.codexRoot,
     agentsRoot: options.agentsRoot,
   });
+  const adoptionManager = createAdoptionManager({
+    projectRoot: options.adoptionRoot || os.homedir(),
+  });
 
   const observe = async () => {
     const now = Date.now();
@@ -62,6 +71,66 @@ export function createDaemon(options = {}) {
   return http.createServer(async (request, response) => {
     const pathname = requestPath(request);
 
+    if (pathname === "/api/adoptions" && request.method === "GET") {
+      try {
+        json(response, 200, { records: await adoptionManager.list() });
+      } catch {
+        json(response, 500, {
+          error: "Capability adoptions are unavailable",
+          code: "adoption_list_failed",
+        });
+      }
+      return;
+    }
+
+    if (pathname.startsWith("/api/adoptions/")) {
+      if (request.method !== "POST") {
+        json(response, 405, { error: "Method not allowed" });
+        return;
+      }
+      if (!isAllowedLocalOrigin(request.headers.origin)) {
+        json(response, 403, { error: "Local origin required", code: "origin_forbidden" });
+        return;
+      }
+      try {
+        const body = await readJsonBody(request);
+        let result;
+        if (pathname === "/api/adoptions/plan") {
+          result = await adoptionManager.plan(body);
+        } else {
+          const approval = request.headers["x-agent-observatory-action"];
+          if (pathname === "/api/adoptions/execute") {
+            result = await adoptionManager.execute(
+              body.planId,
+              body.confirmation,
+              approval,
+            );
+          } else if (pathname === "/api/adoptions/undo") {
+            result = await adoptionManager.undo(
+              body.operationId,
+              body.undoToken,
+              approval,
+            );
+          } else {
+            throw new AdoptionError(404, "Adoption route not found.", "not_found");
+          }
+          cachedSnapshot = null;
+          cachedAt = 0;
+        }
+        json(response, 200, result);
+      } catch (error) {
+        if (error instanceof AdoptionError) {
+          json(response, error.statusCode, { error: error.message, code: error.code });
+        } else {
+          json(response, 500, {
+            error: "Local capability adoption failed",
+            code: "adoption_failed",
+          });
+        }
+      }
+      return;
+    }
+
     if (pathname.startsWith("/api/actions/")) {
       if (request.method !== "POST") {
         json(response, 405, { error: "Method not allowed" });
@@ -77,7 +146,7 @@ export function createDaemon(options = {}) {
         if (pathname === "/api/actions/plan") {
           result = await actionManager.plan(body.action, body.profile);
         } else {
-          if (request.headers["x-agent-observatory-action"] !== "approved") {
+          if (request.headers["x-agent-observatory-action"] !== ADOPTION_APPROVAL_HEADER) {
             throw new ActionError(403, "Explicit action approval header is required.", "approval_required");
           }
           if (pathname === "/api/actions/execute") {

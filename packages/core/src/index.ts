@@ -262,3 +262,4 @@ export * from "./taxonomy";
 
 export * from "./agent-registry";
 export * from "./agent-executions";
+export * from "./capability-adoption";

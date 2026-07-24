@@ -17,6 +17,7 @@ import {
   Languages,
   LayoutDashboard,
   Network,
+  PackageCheck,
   PlugZap,
   RefreshCw,
   Search,
@@ -44,6 +45,7 @@ import {
 } from "@agent-observatory/core";
 import { ec } from "./environment-copy";
 import { AgentRegistryPage } from "./AgentRegistryPage";
+import { CapabilitiesPage } from "./CapabilitiesPage";
 import { InfoHint } from "./InfoHint";
 import {
   disambiguatedProjectLabel,
@@ -60,11 +62,13 @@ import {
   type Language,
 } from "./i18n";
 import { useSnapshot, type SnapshotConnection } from "./useSnapshot";
+import "./capabilities.css";
 
 type PageKey =
   | "overview"
   | "projects"
   | "agents"
+  | "capabilities"
   | "registry"
   | "skills"
   | "integrations"
@@ -74,6 +78,7 @@ const PAGE_KEYS: PageKey[] = [
   "overview",
   "projects",
   "agents",
+  "capabilities",
   "registry",
   "skills",
   "integrations",
@@ -135,6 +140,7 @@ function pageIcon(page: PageKey): LucideIcon {
     overview: LayoutDashboard,
     projects: FolderGit2,
     agents: Bot,
+    capabilities: PackageCheck,
     registry: GitMerge,
     skills: Braces,
     integrations: PlugZap,
@@ -1146,6 +1152,9 @@ export default function App() {
         )}
         {page === "agents" && (
           <AgentsPage snapshot={snapshot} scope={scope} language={language} />
+        )}
+        {page === "capabilities" && (
+          <CapabilitiesPage snapshot={snapshot} scope={scope} language={language} onRefresh={refresh} />
         )}
         {page === "registry" && (
           <AgentRegistryPage snapshot={snapshot} scope={scope} language={language} onRefresh={refresh} />

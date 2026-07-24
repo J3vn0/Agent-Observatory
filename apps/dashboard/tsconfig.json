@@ -1,6 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "baseUrl": "../..",
+    "paths": {
+      "@agent-observatory/core": ["packages/core/src/index.ts"]
+    },
     "jsx": "react-jsx",
     "types": [
       "vite/client",

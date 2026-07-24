@@ -40,6 +40,7 @@ single, understandable map.
 | **Overview** | Environment health, project totals, sessions, subagents, skills, and plugins |
 | **Projects** | Local project history with per-project session and subagent counts |
 | **Agents** | Primary-session and subagent hierarchy, roles, parents, and observation times |
+| **Capabilities** | Per-agent observed/adopted skills, plugins, hooks, and MCP with token-aware adoption |
 | **Registry** | Explainable duplicate detection and cross-project global-agent promotion preview |
 | **Skills** | Searchable skill registry with frontend, backend, cloud, security, data/AI, and other tags |
 | **Integrations** | Plugin, hook, and MCP server inventory with health and source information |
@@ -57,6 +58,27 @@ hover/focus explanation sourced only from allowlisted local metadata.
 - Claude attribution metadata can resolve names such as `Deep Research` and its skills.
 - Registry actions always show a target and conflict preview before approval.
 - Approved actions create a new shared Markdown or Codex TOML definition and support hash-protected undo.
+
+## Adopt capabilities behind a hard cost envelope
+
+The **Capabilities** page separates five facts that are easy to confuse:
+installed, observed, proposed, adopted, and active. “Observed” is shown only
+when attribution metadata or an explicit local manifest provides evidence; it
+is never inferred from conversation text.
+
+Clicking **Adopt** creates a ten-minute plan first. The local daemon validates:
+
+- lazy instruction loading and duplicate suppression;
+- context, output, hourly-call, daily-call, per-run, and daily-token ceilings;
+- a minimum 60-minute schedule interval and schedule-derived call limits;
+- permission risk, loopback browser origin, and explicit approval;
+- fixed display-safe manifest targets with no overwrite behavior.
+
+Approved plans create one local observatory manifest per agent and capability
+under <code>~/.agent-observatory/adoptions/</code>. The operation can be undone
+only while the created file still matches its original hash. These manifests
+record management intent and safety limits; environment-specific runtime
+activation remains an explicit adapter step.
 
 ## How it works
 
@@ -176,7 +198,7 @@ obsidian/          Durable project memory and work logs
 
 ## Current status
 
-**v0.4.0 — Agent Registry and promotion preview**
+**v0.4.x — Capability adoption control plane**
 
 - [x] Codex and Claude environment adapters
 - [x] Global, environment, and project scopes
@@ -185,9 +207,11 @@ obsidian/          Durable project memory and work logs
 - [x] Responsive Korean and English dashboard
 - [x] Secret-safe local snapshot contract
 - [x] Explainable project-agent similarity and promotion candidates
-- [ ] Explainable skill similarity
-- [ ] Guided, reversible promotion execution
-- [ ] Guided skill customization and lifecycle management
+- [x] Explainable capability similarity and duplicate suppression
+- [x] Guided, reversible promotion execution
+- [x] Token-aware capability adoption plans and hash-protected undo
+- [x] Per-agent observed/adopted capability ledger
+- [ ] Environment-specific runtime activation adapters
 - [ ] Additional environment adapters
 - [ ] Read-only finance observability pack
 
