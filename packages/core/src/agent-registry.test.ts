@@ -13,6 +13,7 @@ const agent = (id: string, projectId: string, overrides: Partial<AgentDefinition
   projectId,
   label: "Code review",
   role: "reviewer",
+  description: "Reviews code changes and reports actionable findings.",
   tags: ["code", "review"],
   capabilities: ["subagent"],
   skills: ["github-review"],

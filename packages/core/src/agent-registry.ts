@@ -8,6 +8,7 @@ export interface AgentDefinition {
   projectId?: string;
   label: string;
   role: string;
+  description: string;
   tags: string[];
   capabilities: string[];
   skills: string[];
@@ -62,6 +63,8 @@ interface SafeSessionLike {
   kind: "primary" | "subagent";
   label: string;
   role: string;
+  description?: string;
+  skills?: string[];
   observedAt: string;
 }
 
@@ -203,9 +206,10 @@ export function deriveAgentDefinitions(snapshot: AgentRegistrySnapshotLike): { g
       projectId: first.projectId,
       label: first.label,
       role: first.role,
-      tags: unique([...words(first.label), ...words(first.role)]),
+      description: first.description || "Runs the " + first.role + " role for this project.",
+      tags: unique([...words(first.label), ...words(first.role), ...sessions.flatMap((session) => session.skills ?? [])]),
       capabilities: [first.kind],
-      skills: [],
+      skills: unique(sessions.flatMap((session) => session.skills ?? [])),
       mcpServers: [],
       permissions: [],
       usageCount: sessions.length,
@@ -228,6 +232,7 @@ export function deriveAgentDefinitions(snapshot: AgentRegistrySnapshotLike): { g
       scope: "global" as const,
       label: node.label,
       role: "global-agent",
+      description: "Reusable global agent definition.",
       tags: unique(node.tags),
       capabilities: ["global"],
       skills: unique(dependencies.filter((target) => target.kind === "skill").map((target) => target.label)),

@@ -21,6 +21,53 @@ const safeText = (value, fallback = "") => {
     .slice(0, 80);
 };
 
+const safeDescription = (value, fallback = "") => {
+  if (typeof value !== "string") return fallback;
+  return value
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240);
+};
+
+const humanizeRole = (value) => {
+  const safe = safeText(value, "subagent");
+  if (safe === "workflow-subagent") return "Workflow Automation";
+  return safe
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
+const roleDescription = (role, skills = []) => {
+  const primary = skills[0] || role;
+  const known = {
+    "deep-research": {
+      en: "Investigates multiple sources and synthesizes evidence into a structured result.",
+      ko: "여러 출처를 조사하고 근거를 구조화된 결과로 종합합니다.",
+    },
+    explore: {
+      en: "Explores a codebase or information space and maps the relevant context.",
+      ko: "코드베이스나 정보 공간을 탐색하고 관련 맥락을 정리합니다.",
+    },
+    plan: {
+      en: "Breaks a goal into an executable plan, dependencies, and verification steps.",
+      ko: "목표를 실행 계획, 의존성, 검증 단계로 구체화합니다.",
+    },
+    "code-review": {
+      en: "Reviews code changes and reports prioritized, actionable findings.",
+      ko: "코드 변경을 검토하고 우선순위가 있는 실행 가능한 문제를 보고합니다.",
+    },
+    "workflow-subagent": {
+      en: "Runs an internal Claude workflow. No more specific role metadata was recorded for this execution.",
+      ko: "Claude 내부 워크플로를 실행합니다. 이 실행에는 더 구체적인 역할 메타데이터가 기록되지 않았습니다.",
+    },
+  };
+  return known[primary] || {
+    en: "Runs the " + humanizeRole(primary) + " role using locally observed metadata.",
+    ko: humanizeRole(primary) + " 역할을 로컬에서 관찰된 메타데이터를 기반으로 수행합니다.",
+  };
+};
+
 const safeBasename = (value, fallback = "Local project") => {
   if (typeof value !== "string" || !value.trim()) return fallback;
   const normalized = value.replace(/[\\/]+$/, "");
@@ -136,6 +183,9 @@ const sessionRecord = ({
   parentSessionId,
   label,
   role,
+  description,
+  localizedDescription,
+  skills,
   observedAt,
   source,
 }) => ({
@@ -148,6 +198,9 @@ const sessionRecord = ({
     : {}),
   label: safeText(label, `${environment} session ${String(rawId).slice(0, 8)}`),
   role: safeText(role, kind === "subagent" ? "subagent" : "primary"),
+  ...(description ? { description: safeDescription(description) } : {}),
+  ...(localizedDescription ? { localizedDescription } : {}),
+  ...(skills?.length ? { skills: [...new Set(skills.map((skill) => safeText(skill)).filter(Boolean))].sort() } : {}),
   observedAt,
   source,
 });
@@ -221,6 +274,10 @@ const scanCodex = async (codexRoot) => {
       parentSessionId: safeText(parentRawId),
       label: nickname || (isSubagent ? `Codex subagent ${rawId.slice(0, 8)}` : `Codex session ${rawId.slice(0, 8)}`),
       role: role || (isSubagent ? "subagent" : "primary"),
+      ...(isSubagent ? {
+        description: roleDescription(role || "subagent").en,
+        localizedDescription: roleDescription(role || "subagent"),
+      } : {}),
       observedAt,
       source: "codex-session-meta",
     });
@@ -250,6 +307,23 @@ const safeClaudeMetadata = async (file) => {
       typeof record.agentId === "string",
   );
   return candidate ?? records[0] ?? {};
+};
+
+const safeClaudeAgentMetadata = async (file) => {
+  const records = await safeRecords(file);
+  const metadata = records.find(
+    (record) =>
+      typeof record.sessionId === "string" ||
+      typeof record.cwd === "string" ||
+      typeof record.agentId === "string",
+  ) ?? records[0] ?? {};
+  const skills = [...new Set(records
+    .map((record) => safeText(record.attributionSkill))
+    .filter(Boolean))].sort();
+  const attributedAgents = [...new Set(records
+    .map((record) => safeText(record.attributionAgent))
+    .filter(Boolean))];
+  return { metadata, skills, attributedAgents };
 };
 
 const scanClaude = async (claudeRoot) => {
@@ -318,7 +392,7 @@ const scanClaude = async (claudeRoot) => {
     }
 
     for (const file of nestedAgents) {
-      const metadata = await safeClaudeMetadata(file);
+      const { metadata, skills, attributedAgents } = await safeClaudeAgentMetadata(file);
       const rawId = safeText(
         metadata.agentId || path.basename(file, ".jsonl").replace(/^agent-/i, ""),
       );
@@ -329,14 +403,17 @@ const scanClaude = async (claudeRoot) => {
       );
       const parentRawId =
         subagentsIndex > 0 ? relative[subagentsIndex - 1] : metadata.sessionId;
-      let role = safeText(metadata.slug, "subagent");
+      let agentType = attributedAgents.find((value) => value !== "workflow-subagent") || "subagent";
       const metaPath = file.replace(/\.jsonl$/i, ".meta.json");
       try {
         const meta = JSON.parse(await fs.readFile(metaPath, "utf8"));
-        if (typeof meta.agentType === "string") role = safeText(meta.agentType, role);
+        if (typeof meta.agentType === "string") agentType = safeText(meta.agentType, agentType);
       } catch {
         // Metadata is optional.
       }
+      const role = skills[0] || agentType;
+      const roleCopy = roleDescription(role, skills);
+      const label = humanizeRole(role);
       const observedAt = safeTimestamp(
         metadata.timestamp,
         await fileTimestamp(file),
@@ -347,8 +424,11 @@ const scanClaude = async (claudeRoot) => {
         projectId: project.id,
         kind: "subagent",
         parentSessionId: safeText(parentRawId),
-        label: role !== "subagent" ? role : `Claude subagent ${rawId.slice(0, 8)}`,
+        label,
         role,
+        description: roleCopy.en,
+        localizedDescription: roleCopy,
+        skills,
         observedAt,
         source: "claude-subagent-meta",
       });

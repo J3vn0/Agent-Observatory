@@ -42,7 +42,7 @@ before(async () => {
     path.join(codexRoot, "skills", "frontend-testing", "SKILL.md"),
     `---
 name: frontend-testing
-description: ${SECRET_SENTINELS[0]}
+description: Tests React interfaces with browser automation.
 ---
 
 Never expose ${SECRET_SENTINELS[1]}.
@@ -127,6 +127,7 @@ describe("local observatory scanner", () => {
     assert.equal(skills.length, 1);
     assert.equal(skills[0].metadata.locationCount, 2);
     assert.deepEqual(skills[0].tags, ["frontend", "testing"]);
+    assert.equal(skills[0].summary, "Tests React interfaces with browser automation.");
     assert.equal(
       mcps.find((node) => node.label === "local-files")?.metadata.transport,
       "stdio",

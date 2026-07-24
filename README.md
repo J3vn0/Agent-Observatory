@@ -48,6 +48,16 @@ single, understandable map.
 The interface supports Korean and English and uses a white, desktop-first design
 with responsive layouts for smaller screens.
 
+## Explain, group, then act
+
+Every discovered agent, skill, plugin, hook, and MCP server can expose a concise
+hover/focus explanation sourced only from allowlisted local metadata.
+
+- Repeated subagent runs are grouped by role instead of rendered as duplicate nodes.
+- Claude attribution metadata can resolve names such as `Deep Research` and its skills.
+- Registry actions always show a target and conflict preview before approval.
+- Approved actions create a new shared Markdown or Codex TOML definition and support hash-protected undo.
+
 ## How it works
 
 ~~~mermaid

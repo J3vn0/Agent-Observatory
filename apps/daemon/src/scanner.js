@@ -20,6 +20,7 @@ const IGNORED_DIRECTORIES = new Set([
 ]);
 const MAX_FILES = 50_000;
 const MAX_CONFIG_BYTES = 1_048_576;
+const METADATA_CONCURRENCY = 24;
 const REDACTED_FIELDS = [
   "args",
   "command",
@@ -60,6 +61,58 @@ const sanitizeName = (value, fallback = "unnamed") => {
   }
 
   return cleaned;
+};
+
+const sanitizeDescription = (value, fallback = "") => {
+  if (typeof value !== "string") return fallback;
+  const cleaned = value.normalize("NFKC")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/[A-Za-z]:[\\/][^\s]+/g, "[local path]")
+    .replace(/(?:^|\s)\/(?:Users|home)\/[^\s]+/gi, " [local path]")
+    .replace(/\s+/g, " ").trim().slice(0, 280);
+  if (!cleaned || /^bearer\s/i.test(cleaned) || isHashLike(cleaned)) return fallback;
+  return cleaned;
+};
+
+const unquoteMetadata = (value) => {
+  const trimmed = value.trim();
+  if ((trimmed.startsWith("\"") && trimmed.endsWith("\"")) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))) return trimmed.slice(1, -1);
+  return trimmed;
+};
+
+const displayMetadataFromContent = (extension, content) => {
+  if (extension === ".json") {
+    try {
+      const document = JSON.parse(content);
+      if (document && typeof document === "object" && !Array.isArray(document)) {
+        return {
+          name: sanitizeName(document.name || document.id || "", ""),
+          description: sanitizeDescription(document.description || document.summary || ""),
+        };
+      }
+    } catch { /* Ignore malformed display metadata. */ }
+  }
+  const fields = {};
+  for (const line of content.split(/\r?\n/).slice(0, 80)) {
+    const match = line.match(/^\s*(?:[-]\s*)?(name|description|summary)\s*[:=]\s*(.+?)\s*$/i);
+    if (!match || /^[>|]$/.test(match[2].trim())) continue;
+    fields[match[1].toLowerCase()] = unquoteMetadata(match[2]);
+  }
+  return {
+    name: sanitizeName(fields.name || "", ""),
+    description: sanitizeDescription(fields.description || fields.summary || ""),
+  };
+};
+
+const readDisplayMetadata = async (file) => {
+  let stat;
+  try { stat = await fs.stat(file); } catch { return {}; }
+  if (stat.size > MAX_CONFIG_BYTES) return {};
+  try {
+    const content = await fs.readFile(file, "utf8");
+    return displayMetadataFromContent(path.extname(file).toLowerCase(), content);
+  } catch { return {}; }
 };
 
 const sanitizePathSegment = (segment) => {
@@ -219,6 +272,9 @@ const discoverFromJson = (content) => {
       return {
         name,
         enabled: enabledFromObject(value),
+        description: value && typeof value === "object"
+          ? sanitizeDescription(value.description || value.summary || "")
+          : "",
       };
     });
   }
@@ -619,6 +675,9 @@ const createCollector = () => {
       );
       existing.origin =
         existing.origin === details.origin ? existing.origin : existing.origin;
+      if (!existing.description && details.description) {
+        existing.description = sanitizeDescription(details.description);
+      }
       return existing;
     }
 
@@ -634,6 +693,7 @@ const createCollector = () => {
       origin: details.origin,
       plugin: details.plugin ? sanitizeName(details.plugin) : undefined,
       configType: details.configType,
+      description: sanitizeDescription(details.description || ""),
     };
     records.set(canonical, record);
     return record;
@@ -689,8 +749,10 @@ const makeNode = (record, id) => {
     label: record.name,
     kind: record.kind,
     health: record.enabled ? "healthy" : "attention",
-    summary: summaries[record.kind],
-    localized: localizeAsset(record.kind, record.name),
+    summary: record.description || summaries[record.kind],
+    localized: record.description
+      ? { label: { en: record.name, ko: record.name }, summary: { en: record.description, ko: record.description } }
+      : localizeAsset(record.kind, record.name),
     tags,
     source:
       record.kind === "mcp-server"
@@ -755,17 +817,33 @@ export async function scanObservatory(options = {}) {
         left.relativePath.localeCompare(right.relativePath),
     );
 
+  const displayMetadata = new Map();
+  const metadataFiles = files.filter(
+    (file) =>
+      path.basename(file.relativePath).toLowerCase() === "skill.md" ||
+      isAgentConfig(file.relativePath),
+  );
+  for (let index = 0; index < metadataFiles.length; index += METADATA_CONCURRENCY) {
+    const batch = metadataFiles.slice(index, index + METADATA_CONCURRENCY);
+    const metadata = await Promise.all(
+      batch.map(async (file) => [file.fullPath, await readDisplayMetadata(file.fullPath)]),
+    );
+    metadata.forEach(([fullPath, value]) => displayMetadata.set(fullPath, value));
+  }
+
   for (const file of files) {
     const safePath = sanitizeRelativePath(file.rootName, file.relativePath);
     scannedPaths.add(safePath);
     const base = path.basename(file.relativePath).toLowerCase();
 
     if (base === "skill.md") {
-      const skillName = path.basename(path.dirname(file.relativePath));
+      const metadata = displayMetadata.get(file.fullPath) || {};
+      const skillName = metadata.name || path.basename(path.dirname(file.relativePath));
       collector.upsert("skill", skillName, {
         paths: [safePath],
         roots: [file.rootName],
         origin: originFor(file.rootName, file.relativePath),
+        description: metadata.description,
       });
       continue;
     }
@@ -773,16 +851,18 @@ export async function scanObservatory(options = {}) {
     if (isAgentConfig(file.relativePath)) {
       const parsed = path.parse(file.relativePath);
       const parent = path.basename(path.dirname(file.relativePath));
-      const label =
+      const metadata = displayMetadata.get(file.fullPath) || {};
+      const fallbackLabel =
         parsed.base.toLowerCase() === "agents.md" && parent && parent !== "."
-          ? `${parent} agents`
+          ? parent + " agents"
           : parsed.name;
-      collector.upsert("agent", label, {
+      collector.upsert("agent", metadata.name || fallbackLabel, {
         paths: [safePath],
         roots: [file.rootName],
         origin: "config",
         configCount: 1,
         configType: configTypeFor(file.relativePath),
+        description: metadata.description,
       });
     }
 
@@ -806,6 +886,19 @@ export async function scanObservatory(options = {}) {
       content,
     );
 
+    if (base === "plugin.json") {
+      const metadata = displayMetadataFromContent(".json", content);
+      if (metadata.name) {
+        collector.upsert("plugin", metadata.name, {
+          paths: [safePath],
+          roots: [file.rootName],
+          origin: originFor(file.rootName, file.relativePath),
+          configCount: 1,
+          description: metadata.description,
+        });
+      }
+    }
+
     for (const item of discovery.agents) {
       collector.upsert("agent", item.name, {
         enabled: item.enabled,
@@ -823,6 +916,7 @@ export async function scanObservatory(options = {}) {
         roots: [file.rootName],
         origin: "config",
         configCount: 1,
+        description: item.description,
       });
     }
     for (const item of discovery.mcps) {

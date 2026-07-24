@@ -103,6 +103,9 @@ export interface AgentSessionRecord {
   parentSessionId?: string;
   label: string;
   role: string;
+  description?: string;
+  localizedDescription?: LocalizedText;
+  skills?: string[];
   observedAt: string;
   source: string;
 }
@@ -258,3 +261,4 @@ export function deriveOverview(snapshot: ObservatorySnapshot): OverviewMetrics {
 export * from "./taxonomy";
 
 export * from "./agent-registry";
+export * from "./agent-executions";

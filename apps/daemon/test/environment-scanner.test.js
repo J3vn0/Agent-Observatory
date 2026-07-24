@@ -115,6 +115,10 @@ describe("environment scanner", () => {
         .filter((session) => session.kind === "subagent")
         .every((session) => session.parentSessionId),
     );
+    const claudeSubagent = result.sessions.find((session) => session.environment === "claude" && session.kind === "subagent");
+    assert.equal(claudeSubagent.label, "Researcher");
+    assert.equal(claudeSubagent.role, "researcher");
+    assert.ok(claudeSubagent.localizedDescription.ko);
   });
 
   it("returns display-safe metadata only", async () => {
@@ -125,7 +129,7 @@ describe("environment scanner", () => {
     assert.equal(serialized.includes(fixtureRoot), false);
     assert.equal(serialized.includes("message"), false);
     assert.equal(serialized.includes("prompt"), false);
-    assert.equal(serialized.includes("description"), false);
+    assert.equal(serialized.includes("localizedDescription"), true);
     assert.equal(serialized.includes("Users-example"), false);
   });
 });

@@ -5,10 +5,13 @@ import {
   CheckCircle2,
   CircleAlert,
   Crown,
+  FilePlus2,
   FolderGit2,
   GitMerge,
   Globe2,
   Layers3,
+  LoaderCircle,
+  RotateCcw,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -20,6 +23,8 @@ import {
   type PromotionCandidate,
 } from "@agent-observatory/core";
 import { rc } from "./registry-copy";
+import { executeAgentAction, planAgentAction, undoAgentAction, type AgentAction, type AgentActionPlan, type AgentActionResult } from "./agent-actions";
+import { InfoHint } from "./InfoHint";
 import { disambiguatedProjectLabel, type ObservatoryScope } from "./scope";
 import type { Language } from "./i18n";
 
@@ -27,6 +32,7 @@ interface AgentRegistryPageProps {
   snapshot: ObservatorySnapshot;
   scope: ObservatoryScope;
   language: Language;
+  onRefresh: () => void;
 }
 
 type CandidateFilter = "all" | "exact" | "review";
@@ -63,6 +69,7 @@ function AgentSourceCard({ agent, snapshot, language }: { agent: AgentDefinition
           <strong>{agent.label}</strong>
           <small>{agent.projectId ? projectName(snapshot, agent.projectId) : copy.globalAgents}</small>
         </div>
+        <InfoHint label={copy.roleDescription} description={agent.description} meta={[agent.role, ...agent.skills]} />
       </div>
       <div className="registry-source-meta">
         <span>{agent.environment}</span>
@@ -131,12 +138,17 @@ function EvidenceBars({ similarity, language }: { similarity?: AgentSimilarity; 
   );
 }
 
-export function AgentRegistryPage({ snapshot, scope, language }: AgentRegistryPageProps) {
+export function AgentRegistryPage({ snapshot, scope, language, onRefresh }: AgentRegistryPageProps) {
   const copy = rc(language);
   const registry = useMemo(() => buildAgentRegistry(snapshot), [snapshot]);
   const [filter, setFilter] = useState<CandidateFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [preparedId, setPreparedId] = useState<string | null>(null);
+  const [actionPlan, setActionPlan] = useState<AgentActionPlan | null>(null);
+  const [actionResult, setActionResult] = useState<AgentActionResult | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const environmentMatches = (environment: string) => scope.environment === "all" || environment === scope.environment;
   const projectAgents = registry.projectAgents.filter((agent) =>
     environmentMatches(agent.environment) && (!scope.projectId || agent.projectId === scope.projectId),
@@ -154,6 +166,10 @@ export function AgentRegistryPage({ snapshot, scope, language }: AgentRegistryPa
     if (!candidates.some((candidate) => candidate.id === selectedId)) {
       setSelectedId(candidates[0]?.id ?? null);
       setPreparedId(null);
+      setActionPlan(null);
+      setActionResult(null);
+      setActionMessage(null);
+      setActionError(null);
     }
   }, [candidates, selectedId]);
 
@@ -165,6 +181,63 @@ export function AgentRegistryPage({ snapshot, scope, language }: AgentRegistryPa
     ? registry.similarities.find((similarity) => selected.agentIds.includes(similarity.leftId) && selected.agentIds.includes(similarity.rightId))
     : undefined;
   const exactCount = scopedCandidates.filter((candidate) => candidate.confidence === "exact").length;
+
+  const actionProfile = selected && selectedAgents.length ? {
+    name: selected.suggestedGlobalName,
+    description: selectedAgents.find((agent) => agent.description)?.description || "Reusable agent observed across projects.",
+    role: selectedAgents[0].role,
+    skills: [...new Set(selectedAgents.flatMap((agent) => agent.skills))].sort(),
+    sourceEnvironment: selected.environments[0] || "claude",
+    sourceProjectIds: selected.projectIds,
+  } : null;
+
+  async function prepareExecutablePlan(action: AgentAction) {
+    if (!actionProfile) return;
+    setActionBusy(true);
+    setActionError(null);
+    setActionMessage(null);
+    setActionResult(null);
+    try {
+      setActionPlan(await planAgentAction(action, actionProfile));
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : copy.actionError);
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function executePreparedPlan() {
+    if (!actionPlan || actionPlan.exists || !window.confirm(copy.confirmExecute)) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      const result = await executeAgentAction(actionPlan.planId);
+      setActionResult(result);
+      setActionMessage(copy.actionCreated + " " + result.targetLabel);
+      onRefresh();
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : copy.actionError);
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function undoCreatedDefinition() {
+    if (!actionResult || !window.confirm(copy.confirmUndo)) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await undoAgentAction(actionResult.operationId, actionResult.undoToken);
+      setActionMessage(copy.actionUndone);
+      setActionResult(null);
+      setActionPlan(null);
+      onRefresh();
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : copy.actionError);
+    } finally {
+      setActionBusy(false);
+    }
+  }
 
   return (
     <>
@@ -209,7 +282,14 @@ export function AgentRegistryPage({ snapshot, scope, language }: AgentRegistryPa
                 snapshot={snapshot}
                 language={language}
                 selected={candidate.id === selectedId}
-                onSelect={() => { setSelectedId(candidate.id); setPreparedId(null); }}
+                onSelect={() => {
+                  setSelectedId(candidate.id);
+                  setPreparedId(null);
+                  setActionPlan(null);
+                  setActionResult(null);
+                  setActionMessage(null);
+                  setActionError(null);
+                }}
               />
             )) : <div className="registry-empty"><GitMerge size={23} /><span>{copy.noCandidates}</span></div>}
           </div>
@@ -250,7 +330,42 @@ export function AgentRegistryPage({ snapshot, scope, language }: AgentRegistryPa
                   <GitMerge size={15} />{copy.preparePlan}
                 </button>
               </div>
-              {preparedId === selected.id && <div className="plan-ready-banner" role="status"><CheckCircle2 size={16} />{copy.planPrepared}</div>}
+              {preparedId === selected.id && (
+                <div className="executable-plan-panel">
+                  <div className="plan-ready-banner" role="status"><CheckCircle2 size={16} />{copy.planPrepared}</div>
+                  <div className="action-choice-grid">
+                    <button type="button" onClick={() => void prepareExecutablePlan("promote-shared")} disabled={actionBusy}>
+                      <FilePlus2 size={16} />
+                      <span><strong>{copy.prepareShared}</strong><small>{copy.sharedExplanation}</small></span>
+                    </button>
+                    <button type="button" onClick={() => void prepareExecutablePlan("apply-codex")} disabled={actionBusy}>
+                      <Bot size={16} />
+                      <span><strong>{copy.prepareCodex}</strong><small>{copy.codexExplanation}</small></span>
+                    </button>
+                  </div>
+                  {actionPlan && (
+                    <div className="execution-plan-card">
+                      <div><span>{copy.planTarget}</span><strong>{actionPlan.targetLabel}</strong><small>{actionPlan.preview.format} · {actionPlan.preview.role}</small></div>
+                      {actionPlan.preview.skills.length > 0 && <div className="execution-plan-skills">{actionPlan.preview.skills.map((skill) => <span key={skill}>{skill}</span>)}</div>}
+                      {actionPlan.exists ? (
+                        <p className="action-error"><CircleAlert size={14} />{copy.planConflict}</p>
+                      ) : (
+                        <button type="button" className="execute-action-button" onClick={() => void executePreparedPlan()} disabled={actionBusy || Boolean(actionResult)}>
+                          {actionBusy ? <LoaderCircle className="spin" size={15} /> : <ShieldCheck size={15} />}
+                          {actionBusy ? copy.executing : copy.executePlan}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {actionMessage && <div className="action-success" role="status"><CheckCircle2 size={15} />{actionMessage}</div>}
+                  {actionError && <div className="action-error" role="alert"><CircleAlert size={15} />{actionError}</div>}
+                  {actionResult && (
+                    <button type="button" className="undo-action-button" onClick={() => void undoCreatedDefinition()} disabled={actionBusy}>
+                      <RotateCcw size={14} />{copy.undo}
+                    </button>
+                  )}
+                </div>
+              )}
             </>
           ) : <div className="registry-empty registry-preview-empty"><Bot size={25} /><span>{copy.selectCandidate}</span></div>}
         </div>
@@ -267,6 +382,7 @@ export function AgentRegistryPage({ snapshot, scope, language }: AgentRegistryPa
               <article key={agent.id} className="global-agent-card">
                 <span><Globe2 size={15} /></span>
                 <div><strong>{agent.label}</strong><small>{agent.environment} · {agent.tags.slice(0, 3).join(" · ")}</small></div>
+                <InfoHint label={copy.roleDescription} description={agent.description} meta={[agent.role, ...agent.skills]} />
               </article>
             ))}
           </div>

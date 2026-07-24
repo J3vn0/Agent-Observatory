@@ -31,6 +31,7 @@ import {
   PROGRAMMING_TAG_LABELS,
   PROGRAMMING_TAGS,
   deriveOverview,
+  groupSubagentExecutions,
   type AgentSessionRecord,
   type EnvironmentKind,
   type EnvironmentRecord,
@@ -43,6 +44,7 @@ import {
 } from "@agent-observatory/core";
 import { ec } from "./environment-copy";
 import { AgentRegistryPage } from "./AgentRegistryPage";
+import { InfoHint } from "./InfoHint";
 import {
   disambiguatedProjectLabel,
   nodeEnvironment,
@@ -631,13 +633,38 @@ function AgentsPage({
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const projects = snapshot.projects ?? [];
-  const sessions = sessionsInScope(snapshot, scope).filter((session) =>
-    !search ||
-    `${session.label} ${session.role}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
-  );
+  const scopedSessions = sessionsInScope(snapshot, scope);
+  const groupedSubagents = groupSubagentExecutions(scopedSessions, { preserveParent: false });
+  const primaryRows = scopedSessions.filter((session) => session.kind === "primary").map((session) => ({
+    id: session.id,
+    kind: "primary" as const,
+    environment: session.environment,
+    projectId: session.projectId,
+    parentSessionId: session.parentSessionId,
+    label: session.label,
+    role: session.role,
+    description: language === "ko" ? "프로젝트의 기본 실행 세션입니다." : "Primary execution session for this project.",
+    skills: session.skills ?? [],
+    executionCount: 1,
+    observedAt: session.observedAt,
+  }));
+  const subagentRows = groupedSubagents.map((group) => ({
+    ...group,
+    kind: "subagent" as const,
+    description: group.localizedDescription?.[language] ?? group.description,
+    observedAt: group.lastObservedAt,
+  }));
+  const rows = [...primaryRows, ...subagentRows]
+    .filter((row) =>
+      !search ||
+      (row.label + " " + row.role + " " + row.description + " " + row.skills.join(" "))
+        .toLocaleLowerCase()
+        .includes(search.toLocaleLowerCase()),
+    )
+    .sort((left, right) => right.observedAt.localeCompare(left.observedAt));
   useEffect(() => setPage(1), [search, scope.environment, scope.projectId]);
-  const pageCount = Math.max(1, Math.ceil(sessions.length / PAGE_SIZE));
-  const visible = sessions.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const visible = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const byId = new Map((snapshot.sessions ?? []).map((session) => [session.id, session]));
   return (
     <>
@@ -647,14 +674,15 @@ function AgentsPage({
         actions={<SearchField value={search} onChange={setSearch} placeholder={copy.searchAgents} />}
       />
       <section className="metric-strip compact-metrics">
-        <Metric icon={Activity} label={copy.primarySessions} value={sessions.filter((session) => session.kind === "primary").length} />
-        <Metric icon={Bot} label={copy.subagents} value={sessions.filter((session) => session.kind === "subagent").length} />
-        <Metric icon={FolderGit2} label={copy.projects} value={new Set(sessions.map((session) => session.projectId)).size} />
+        <Metric icon={Activity} label={copy.primarySessions} value={primaryRows.length} />
+        <Metric icon={Bot} label={language === "ko" ? "서브에이전트 정의" : "Subagent definitions"} value={groupedSubagents.length} />
+        <Metric icon={Sparkles} label={language === "ko" ? "서브에이전트 실행" : "Subagent runs"} value={groupedSubagents.reduce((sum, group) => sum + group.executionCount, 0)} />
+        <Metric icon={FolderGit2} label={copy.projects} value={new Set(rows.map((row) => row.projectId)).size} />
       </section>
       <section className="wide-table-panel">
         <div className="table-title">
           <div><p className="eyebrow">{copy.agentHierarchy}</p><h2>{copy.projectHistory}</h2></div>
-          <span>{sessions.length.toLocaleString()}</span>
+          <span>{rows.length.toLocaleString()}</span>
         </div>
         <div className="agent-table">
           <div className="agent-table-head">
@@ -664,21 +692,27 @@ function AgentsPage({
             <span>{copy.role}</span>
             <span>{copy.lastObserved}</span>
           </div>
-          {visible.length ? visible.map((session) => {
-            const project = projects.find((candidate) => candidate.id === session.projectId);
-            const parent = session.parentSessionId ? byId.get(session.parentSessionId) : undefined;
+          {visible.length ? visible.map((row) => {
+            const project = projects.find((candidate) => candidate.id === row.projectId);
+            const parent = row.parentSessionId ? byId.get(row.parentSessionId) : undefined;
+            const parentLabel = row.kind === "subagent"
+              ? (row.executionCount > 1
+                ? (language === "ko" ? "여러 실행에서 관찰" : "Observed across runs")
+                : parent?.label ?? copy.standalone)
+              : parent?.label ?? copy.standalone;
             return (
-              <div key={session.id} className={`agent-table-row session-row-${session.kind}`}>
+              <div key={row.id} className={"agent-table-row session-row-" + row.kind}>
                 <div className="session-name">
-                  <span className={`session-kind-icon session-${session.kind}`}>
-                    {session.kind === "subagent" ? <Bot size={15} /> : <Activity size={15} />}
+                  <span className={"session-kind-icon session-" + row.kind}>
+                    {row.kind === "subagent" ? <Bot size={15} /> : <Activity size={15} />}
                   </span>
-                  <span><strong>{session.label}</strong><small>{session.environment} · {session.kind}</small></span>
+                  <span><strong>{row.label}</strong><small>{row.environment} · {row.kind}</small></span>
+                  <InfoHint label={row.label} description={row.description} meta={[row.role, ...row.skills]} />
                 </div>
                 <span>{project ? disambiguatedProjectLabel(project, projects) : "—"}</span>
-                <span>{parent?.label ?? (session.parentSessionId ? session.parentSessionId.slice(-8) : copy.standalone)}</span>
-                <span className="role-pill">{session.role}</span>
-                <time>{formatDate(language, session.observedAt)}</time>
+                <span>{parentLabel}</span>
+                <span className="role-cell"><span className="role-pill">{row.role}</span>{row.executionCount > 1 && <small>{row.executionCount}×</small>}</span>
+                <time>{formatDate(language, row.observedAt)}</time>
               </div>
             );
           }) : <EmptyState text={copy.noAgentActivity} />}
@@ -713,6 +747,7 @@ function AssetTable({
             <div className="asset-name">
               <span className={`asset-icon asset-icon-${node.kind}`}><Icon size={16} /></span>
               <span><strong>{text.label}</strong><small>{text.summary}</small></span>
+              <InfoHint label={text.label} description={text.summary} meta={[kindLabel(node.kind, language), ...node.tags.slice(0, 3).map((tag) => tagLabel(tag, language))]} />
             </div>
             <span><span className="kind-label">{kindLabel(node.kind, language)}</span></span>
             <div className="row-tags">{node.tags.slice(0, 4).map((tag) => <span key={tag}>{tagLabel(tag, language)}</span>)}</div>
@@ -812,6 +847,9 @@ interface VisualNode {
   y: number;
   environment?: EnvironmentKind;
   projectId?: string;
+  description: string;
+  skills: string[];
+  executionCount?: number;
 }
 
 interface VisualEdge {
@@ -822,6 +860,7 @@ interface VisualEdge {
 function buildScopeGraph(
   snapshot: ObservatorySnapshot,
   scope: ObservatoryScope,
+  language: Language,
 ): { nodes: VisualNode[]; edges: VisualEdge[] } {
   const projects = projectsInScope(snapshot, scope);
   const sessions = sessionsInScope(snapshot, scope);
@@ -829,7 +868,7 @@ function buildScopeGraph(
     const project = projects[0];
     if (!project) return { nodes: [], edges: [] };
     const primary = sessions.filter((session) => session.kind === "primary").slice(0, 12);
-    const subagents = sessions.filter((session) => session.kind === "subagent").slice(0, 28);
+    const subagents = groupSubagentExecutions(sessions, { preserveParent: true }).slice(0, 20);
     const nodes: VisualNode[] = [{
       id: project.id,
       label: project.label,
@@ -839,6 +878,8 @@ function buildScopeGraph(
       y: 330,
       environment: project.environment,
       projectId: project.id,
+      description: project.environment + " project with " + project.sessionCount + " observed sessions.",
+      skills: [],
     }];
     primary.forEach((session, index) => nodes.push({
       id: session.id,
@@ -849,26 +890,32 @@ function buildScopeGraph(
       y: 70 + index * Math.min(54, 590 / Math.max(primary.length, 1)),
       environment: session.environment,
       projectId: session.projectId,
+      description: session.localizedDescription?.[language] || session.description || "Primary execution session.",
+      skills: session.skills ?? [],
+      executionCount: 1,
     }));
-    subagents.forEach((session, index) => nodes.push({
-      id: session.id,
-      label: session.label,
-      sublabel: session.role,
+    subagents.forEach((group, index) => nodes.push({
+      id: group.id,
+      label: group.label,
+      sublabel: group.role + (group.executionCount > 1 ? " · " + group.executionCount + "×" : ""),
       kind: "subagent",
       x: 900 + (index % 2) * 250,
-      y: 38 + Math.floor(index / 2) * 45,
-      environment: session.environment,
-      projectId: session.projectId,
+      y: 38 + Math.floor(index / 2) * 58,
+      environment: group.environment,
+      projectId: group.projectId,
+      description: group.localizedDescription?.[language] || group.description,
+      skills: group.skills,
+      executionCount: group.executionCount,
     }));
     const primaryIds = new Set(primary.map((session) => session.id));
     const edges: VisualEdge[] = [
       ...primary.map((session) => ({ source: project.id, target: session.id })),
-      ...subagents.map((session) => ({
+      ...subagents.map((group) => ({
         source:
-          session.parentSessionId && primaryIds.has(session.parentSessionId)
-            ? session.parentSessionId
+          group.parentSessionId && primaryIds.has(group.parentSessionId)
+            ? group.parentSessionId
             : project.id,
-        target: session.id,
+        target: group.id,
       })),
     ];
     return { nodes, edges };
@@ -887,6 +934,8 @@ function buildScopeGraph(
     x: 70,
     y: 190 + index * 260,
     environment: environment.id,
+    description: environment.label + " local agent environment.",
+    skills: [],
   }));
   visibleProjects.forEach((project, index) => nodes.push({
     id: project.id,
@@ -897,6 +946,8 @@ function buildScopeGraph(
     y: 45 + Math.floor(index / 3) * 64,
     environment: project.environment,
     projectId: project.id,
+    description: project.sessionCount + " sessions and " + project.subagentCount + " subagent runs observed.",
+    skills: [],
   }));
   const edges = visibleProjects.map((project) => ({
     source: `environment-${project.environment}`,
@@ -917,8 +968,10 @@ function GraphPage({
   onScopeChange: (scope: ObservatoryScope) => void;
 }) {
   const copy = ec(language);
-  const graph = useMemo(() => buildScopeGraph(snapshot, scope), [snapshot, scope]);
+  const graph = useMemo(() => buildScopeGraph(snapshot, scope, language), [snapshot, scope, language]);
   const positions = new Map(graph.nodes.map((node) => [node.id, node]));
+  const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
+  const activeNode = graph.nodes.find((node) => node.id === activeNodeId);
   return (
     <>
       <PageHeader page="graph" language={language} />
@@ -929,6 +982,17 @@ function GraphPage({
         </div>
         {graph.nodes.length ? (
           <div className="large-graph-shell">
+            {activeNode && (
+              <aside className="graph-role-inspector" role="status">
+                <span>{activeNode.kind === "subagent" ? (language === "ko" ? "역할을 확인했습니다" : "Role identified") : kindLabel(activeNode.kind === "primary" ? "execution" : "project", language)}</span>
+                <strong>{activeNode.label}</strong>
+                <p>{activeNode.description}</p>
+                <div>
+                  {activeNode.executionCount && activeNode.executionCount > 1 && <small>{activeNode.executionCount}× {language === "ko" ? "반복 실행" : "repeated runs"}</small>}
+                  {activeNode.skills.map((skill) => <small key={skill}>{skill}</small>)}
+                </div>
+              </aside>
+            )}
             <svg className="large-graph" viewBox="0 0 1400 720" role="img" aria-label={copy.environmentGraph}>
               <defs>
                 <marker id="scope-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
@@ -952,14 +1016,26 @@ function GraphPage({
                   key={node.id}
                   className={`large-graph-node graph-${node.kind} ${node.environment ? `environment-${node.environment}` : ""}`}
                   transform={`translate(${node.x} ${node.y})`}
-                  role={node.projectId ? "button" : undefined}
-                  tabIndex={node.projectId ? 0 : undefined}
+                  role={node.projectId ? "button" : "group"}
+                  tabIndex={0}
+                  aria-label={node.label + ": " + node.description}
+                  onMouseEnter={() => setActiveNodeId(node.id)}
+                  onMouseLeave={() => setActiveNodeId((current) => current === node.id ? null : current)}
+                  onFocus={() => setActiveNodeId(node.id)}
+                  onBlur={() => setActiveNodeId((current) => current === node.id ? null : current)}
+                  onKeyDown={(event) => {
+                    if ((event.key === "Enter" || event.key === " ") && node.projectId && node.environment) {
+                      event.preventDefault();
+                      onScopeChange({ environment: node.environment, projectId: node.projectId });
+                    }
+                  }}
                   onClick={() => {
                     if (node.projectId && node.environment) {
                       onScopeChange({ environment: node.environment, projectId: node.projectId });
                     }
                   }}
                 >
+                  <title>{node.label + " — " + node.description}</title>
                   <rect width="180" height="50" rx="10" />
                   <circle cx="18" cy="17" r="4" />
                   <text x="30" y="20" className="graph-label">
@@ -1072,7 +1148,7 @@ export default function App() {
           <AgentsPage snapshot={snapshot} scope={scope} language={language} />
         )}
         {page === "registry" && (
-          <AgentRegistryPage snapshot={snapshot} scope={scope} language={language} />
+          <AgentRegistryPage snapshot={snapshot} scope={scope} language={language} onRefresh={refresh} />
         )}
         {(page === "skills" || page === "integrations") && (
           <AssetsPage page={page} snapshot={snapshot} scope={scope} language={language} />

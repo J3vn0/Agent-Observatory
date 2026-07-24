@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { scanObservatory } from "./scanner.js";
 import { loadLocalEnv } from "./env.js";
+import { ActionError, createActionManager, isAllowedLocalOrigin, readJsonBody } from "./actions.js";
 
 const HOST = "127.0.0.1";
 const DEFAULT_PORT = 4317;
@@ -30,6 +31,10 @@ export function createDaemon(options = {}) {
   let cachedSnapshot = null;
   let cachedAt = 0;
   let pendingSnapshot = null;
+  const actionManager = createActionManager({
+    codexRoot: options.codexRoot,
+    agentsRoot: options.agentsRoot,
+  });
 
   const observe = async () => {
     const now = Date.now();
@@ -40,6 +45,7 @@ export function createDaemon(options = {}) {
       pendingSnapshot = scanner({
         codexRoot: options.codexRoot,
         agentsRoot: options.agentsRoot,
+        claudeRoot: options.claudeRoot,
       })
         .then((snapshot) => {
           cachedSnapshot = snapshot;
@@ -55,6 +61,45 @@ export function createDaemon(options = {}) {
 
   return http.createServer(async (request, response) => {
     const pathname = requestPath(request);
+
+    if (pathname.startsWith("/api/actions/")) {
+      if (request.method !== "POST") {
+        json(response, 405, { error: "Method not allowed" });
+        return;
+      }
+      if (!isAllowedLocalOrigin(request.headers.origin)) {
+        json(response, 403, { error: "Local origin required", code: "origin_forbidden" });
+        return;
+      }
+      try {
+        const body = await readJsonBody(request);
+        let result;
+        if (pathname === "/api/actions/plan") {
+          result = await actionManager.plan(body.action, body.profile);
+        } else {
+          if (request.headers["x-agent-observatory-action"] !== "approved") {
+            throw new ActionError(403, "Explicit action approval header is required.", "approval_required");
+          }
+          if (pathname === "/api/actions/execute") {
+            result = await actionManager.execute(body.planId, body.confirmation);
+          } else if (pathname === "/api/actions/undo") {
+            result = await actionManager.undo(body.operationId, body.undoToken);
+          } else {
+            throw new ActionError(404, "Action route not found.", "not_found");
+          }
+          cachedSnapshot = null;
+          cachedAt = 0;
+        }
+        json(response, 200, result);
+      } catch (error) {
+        if (error instanceof ActionError) {
+          json(response, error.statusCode, { error: error.message, code: error.code });
+        } else {
+          json(response, 500, { error: "Local action failed", code: "action_failed" });
+        }
+      }
+      return;
+    }
 
     if (request.method !== "GET") {
       json(response, 405, { error: "Method not allowed" });
