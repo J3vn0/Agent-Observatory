@@ -18,6 +18,8 @@ import {
   Languages,
   LayoutDashboard,
   Network,
+  PanelLeftClose,
+  PanelLeftOpen,
   PlugZap,
   RefreshCw,
   Search,
@@ -120,6 +122,56 @@ function Brand() {
   );
 }
 
+function NavigationRail({
+  page,
+  language,
+  navigate,
+}: {
+  page: PageKey;
+  language: Language;
+  navigate: (page: PageKey) => void;
+}) {
+  const copy = ec(language);
+  const financeLabel = language === "ko" ? "파이낸스" : "Finance";
+
+  return (
+    <aside className="app-rail" aria-label="Agent Observatory navigation">
+      <a className="rail-brand" href="#/overview" aria-label="Agent Observatory">
+        <span className="brand-mark" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </span>
+      </a>
+      <nav
+        className="rail-navigation"
+        aria-label={language === "ko" ? "주요 메뉴" : "Primary navigation"}
+      >
+        {PAGE_KEYS.map((key) => {
+          const Icon = pageIcon(key);
+          const label = key === "finance" ? financeLabel : copy.pages[key];
+          return (
+            <a
+              key={key}
+              href={`#/${key}`}
+              className={page === key ? "active" : ""}
+              aria-label={label}
+              aria-current={page === key ? "page" : undefined}
+              data-tooltip={label}
+              onClick={() => navigate(key)}
+            >
+              <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+            </a>
+          );
+        })}
+      </nav>
+      <div className="rail-status" title={copy.liveMetadataOnly}>
+        <span className="pulse-dot" aria-hidden="true" />
+        <span className="sr-only">{copy.liveMetadataOnly}</span>
+      </div>
+    </aside>
+  );
+}
 function nodeIcon(kind: NodeKind): LucideIcon {
   const icons: Partial<Record<NodeKind, LucideIcon>> = {
     agent: Bot,
@@ -196,7 +248,7 @@ function ConnectionBadge({
         ? t(language, "status", "connecting")
         : t(language, "status", "fallback");
   return (
-    <span className={`connection-badge connection-${connection}`}>
+    <span className={`connection-badge connection-${connection}`} role="status" aria-live="polite">
       <span className="pulse-dot" aria-hidden="true" />
       {label}
     </span>
@@ -261,6 +313,7 @@ function ScopeBar({
           <button
             className={scope.environment === "all" ? "active" : ""}
             type="button"
+            aria-pressed={scope.environment === "all"}
             onClick={() => onScopeChange({ environment: "all", projectId: null })}
           >
             <Globe2 size={14} />
@@ -271,6 +324,7 @@ function ScopeBar({
               className={scope.environment === environment.id ? "active" : ""}
               type="button"
               key={environment.id}
+              aria-pressed={scope.environment === environment.id}
               disabled={!environment.installed}
               onClick={() =>
                 onScopeChange({ environment: environment.id, projectId: null })
@@ -1071,6 +1125,10 @@ export default function App() {
     environment: "all",
     projectId: null,
   });
+  const [contextCollapsed, setContextCollapsed] = useState(() => {
+    if (window.innerWidth < 900) return true;
+    return window.localStorage.getItem("agent-observatory-context-collapsed") === "true";
+  });
   const copy = ec(language);
   const financeLabel = language === "ko" ? "파이낸스" : "Finance";
   const currentPageLabel = page === "finance" ? financeLabel : copy.pages[page];
@@ -1079,6 +1137,13 @@ export default function App() {
     window.localStorage.setItem("agent-observatory-language", language);
     document.documentElement.lang = language;
   }, [language]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      "agent-observatory-context-collapsed",
+      String(contextCollapsed),
+    );
+  }, [contextCollapsed]);
 
   useEffect(() => {
     if (
@@ -1094,83 +1159,120 @@ export default function App() {
   );
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${contextCollapsed ? "context-collapsed" : ""}`}>
       <a className="skip-link" href="#main">
-        {currentPageLabel}
+        {language === "ko" ? "본문으로 건너뛰기" : "Skip to content"}
       </a>
-      <header className="topbar">
-        <Brand />
-        <nav className="page-tabs" aria-label="Agent Observatory">
-          {PAGE_KEYS.map((key) => {
-            const Icon = pageIcon(key);
-            return (
-              <a
-                key={key}
-                href={`#/${key}`}
-                className={page === key ? "active" : ""}
-                onClick={() => navigate(key)}
-              >
-                <Icon size={15} />
-                {key === "finance" ? financeLabel : copy.pages[key]}
-              </a>
-            );
-          })}
-        </nav>
-        {currentProject && (
-          <span className="top-project-label">
-            <FolderGit2 size={14} />
-            {disambiguatedProjectLabel(currentProject, snapshot.projects ?? [])}
-          </span>
-        )}
-      </header>
-      <ScopeBar
-        snapshot={snapshot}
-        scope={scope}
-        language={language}
-        connection={connection}
-        onScopeChange={setScope}
-        onLanguageChange={() =>
-          setLanguage((current) => (current === "ko" ? "en" : "ko"))
-        }
-        onRefresh={refresh}
-      />
+      <NavigationRail page={page} language={language} navigate={navigate} />
+      <aside className="context-sidebar" aria-label={copy.currentScope}>
+        <div className="context-sidebar-header">
+          <Brand />
+          <button
+            type="button"
+            onClick={() => setContextCollapsed(true)}
+            aria-label={language === "ko" ? "사이드바 접기" : "Collapse sidebar"}
+          >
+            <PanelLeftClose size={16} />
+          </button>
+        </div>
+        <ScopeBar
+          snapshot={snapshot}
+          scope={scope}
+          language={language}
+          connection={connection}
+          onScopeChange={setScope}
+          onLanguageChange={() =>
+            setLanguage((current) => (current === "ko" ? "en" : "ko"))
+          }
+          onRefresh={refresh}
+        />
+        <div className="context-sidebar-note">
+          <ShieldCheck size={14} />
+          <span>{copy.liveMetadataOnly}</span>
+        </div>
+      </aside>
 
-      <main id="main" className="page-main">
-        {connection === "fallback" && (
-          <div className="fallback-banner" role="status">
-            <CircleAlert size={18} />
-            <div>
-              <strong>{t(language, "scan", "fallbackActivated")}</strong>
-              <span>{t(language, "scan", "fallbackReason")}{error ? ` · ${error}` : ""}</span>
-            </div>
+      <section className="workspace-frame">
+        <header className="workspace-topbar">
+          <div className="workspace-heading">
+            <button
+              className="context-toggle"
+              type="button"
+              onClick={() => setContextCollapsed((current) => !current)}
+              aria-expanded={!contextCollapsed}
+              aria-label={language === "ko" ? (contextCollapsed ? "사이드바 열기" : "사이드바 접기") : (contextCollapsed ? "Open sidebar" : "Collapse sidebar")}
+            >
+              {contextCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+            </button>
+            <span>Agent Observatory</span>
+            <ChevronRight size={13} />
+            <strong>{currentPageLabel}</strong>
           </div>
-        )}
-        {page === "overview" && (
-          <OverviewPage snapshot={snapshot} scope={scope} language={language} navigate={navigate} onScopeChange={setScope} />
-        )}
-        {page === "projects" && (
-          <ProjectsPage snapshot={snapshot} scope={scope} language={language} navigate={navigate} onScopeChange={setScope} />
-        )}
-        {page === "agents" && (
-          <AgentsPage snapshot={snapshot} scope={scope} language={language} />
-        )}
-        {page === "registry" && (
-          <AgentRegistryPage snapshot={snapshot} scope={scope} language={language} onRefresh={refresh} />
-        )}
-        {page === "finance" && (
-          <FinancePage language={language} />
-        )}
-        {(page === "skills" || page === "integrations") && (
-          <AssetsPage page={page} snapshot={snapshot} scope={scope} language={language} />
-        )}
-        {page === "graph" && (
-          <GraphPage snapshot={snapshot} scope={scope} language={language} onScopeChange={setScope} />
-        )}
-      </main>
-      <footer className="app-footer">
-        <span><ShieldCheck size={14} />{copy.liveMetadataOnly}</span>
-        <span>Agent Observatory · local only</span>
-      </footer>
+          <div className="workspace-actions">
+            {currentProject && (
+              <span className="top-project-label">
+                <FolderGit2 size={14} />
+                {disambiguatedProjectLabel(currentProject, snapshot.projects ?? [])}
+              </span>
+            )}
+            <ConnectionBadge connection={connection} language={language} />
+            <button
+              className="icon-action"
+              type="button"
+              onClick={refresh}
+              aria-label={t(language, "scan", "scanAgain")}
+            >
+              <RefreshCw size={15} className={connection === "loading" ? "is-spinning" : ""} />
+            </button>
+            <button
+              className="language-toggle"
+              type="button"
+              onClick={() => setLanguage((current) => (current === "ko" ? "en" : "ko"))}
+              aria-label={t(language, "language", "toggleLabel")}
+            >
+              <Languages size={15} />
+              {language === "ko" ? "EN" : "KO"}
+            </button>
+          </div>
+        </header>
+
+        <main id="main" className="page-main" tabIndex={-1}>
+          {connection === "fallback" && (
+            <div className="fallback-banner" role="status">
+              <CircleAlert size={18} />
+              <div>
+                <strong>{t(language, "scan", "fallbackActivated")}</strong>
+                <span>{t(language, "scan", "fallbackReason")}{error ? ` · ${error}` : ""}</span>
+              </div>
+            </div>
+          )}
+          {page === "overview" && (
+            <OverviewPage snapshot={snapshot} scope={scope} language={language} navigate={navigate} onScopeChange={setScope} />
+          )}
+          {page === "projects" && (
+            <ProjectsPage snapshot={snapshot} scope={scope} language={language} navigate={navigate} onScopeChange={setScope} />
+          )}
+          {page === "agents" && (
+            <AgentsPage snapshot={snapshot} scope={scope} language={language} />
+          )}
+          {page === "registry" && (
+            <AgentRegistryPage snapshot={snapshot} scope={scope} language={language} onRefresh={refresh} />
+          )}
+          {page === "finance" && (
+            <FinancePage language={language} />
+          )}
+          {(page === "skills" || page === "integrations") && (
+            <AssetsPage page={page} snapshot={snapshot} scope={scope} language={language} />
+          )}
+          {page === "graph" && (
+            <GraphPage snapshot={snapshot} scope={scope} language={language} onScopeChange={setScope} />
+          )}
+        </main>
+        <footer className="app-footer">
+          <span><ShieldCheck size={14} />{copy.liveMetadataOnly}</span>
+          <span>Agent Observatory · local only</span>
+        </footer>
+      </section>
     </div>
   );
 }
