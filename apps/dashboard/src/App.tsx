@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleAlert,
+  CircleDollarSign,
   Code2,
   Database,
   FolderGit2,
@@ -44,6 +45,7 @@ import {
 } from "@agent-observatory/core";
 import { ec } from "./environment-copy";
 import { AgentRegistryPage } from "./AgentRegistryPage";
+import { FinancePage } from "./FinancePage";
 import { InfoHint } from "./InfoHint";
 import {
   disambiguatedProjectLabel,
@@ -66,6 +68,7 @@ type PageKey =
   | "projects"
   | "agents"
   | "registry"
+  | "finance"
   | "skills"
   | "integrations"
   | "graph";
@@ -75,6 +78,7 @@ const PAGE_KEYS: PageKey[] = [
   "projects",
   "agents",
   "registry",
+  "finance",
   "skills",
   "integrations",
   "graph",
@@ -136,6 +140,7 @@ function pageIcon(page: PageKey): LucideIcon {
     projects: FolderGit2,
     agents: Bot,
     registry: GitMerge,
+    finance: CircleDollarSign,
     skills: Braces,
     integrations: PlugZap,
     graph: Network,
@@ -203,7 +208,7 @@ function PageHeader({
   language,
   actions,
 }: {
-  page: PageKey;
+  page: Exclude<PageKey, "finance">;
   language: Language;
   actions?: React.ReactNode;
 }) {
@@ -1067,6 +1072,8 @@ export default function App() {
     projectId: null,
   });
   const copy = ec(language);
+  const financeLabel = language === "ko" ? "파이낸스" : "Finance";
+  const currentPageLabel = page === "finance" ? financeLabel : copy.pages[page];
 
   useEffect(() => {
     window.localStorage.setItem("agent-observatory-language", language);
@@ -1089,7 +1096,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main">
-        {copy.pages[page]}
+        {currentPageLabel}
       </a>
       <header className="topbar">
         <Brand />
@@ -1104,7 +1111,7 @@ export default function App() {
                 onClick={() => navigate(key)}
               >
                 <Icon size={15} />
-                {copy.pages[key]}
+                {key === "finance" ? financeLabel : copy.pages[key]}
               </a>
             );
           })}
@@ -1149,6 +1156,9 @@ export default function App() {
         )}
         {page === "registry" && (
           <AgentRegistryPage snapshot={snapshot} scope={scope} language={language} onRefresh={refresh} />
+        )}
+        {page === "finance" && (
+          <FinancePage language={language} />
         )}
         {(page === "skills" || page === "integrations") && (
           <AssetsPage page={page} snapshot={snapshot} scope={scope} language={language} />
