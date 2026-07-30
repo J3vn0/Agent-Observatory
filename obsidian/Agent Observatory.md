@@ -136,12 +136,16 @@ The finance pack starts with ETF, bond, filing, and macro-research workflows. It
 - 2026-07-23: Replace the initial dark operations style with a white editorial interface.
 - 2026-07-24: Separate primary execution sessions from promotable subagent definitions.
 - 2026-07-24: Keep promotion read-only until approval and reversible execution are designed.
+- 2026-07-31: Highlight observed influence and reuse evidence, but do not label it as actual efficiency until outcome, elapsed-time, and token-cost telemetry exist.
+- 2026-07-31: Keep the local ADE native; treat Docker as an optional worker or hosted deployment mode rather than an MVP dependency.
 
 ## Working links
 
 - [[Work Log/2026-07-23]]
+- [[Work Log/2026-07-31]]
 - Product brief: `docs/product/PRODUCT_BRIEF.md`
 - Architecture: `docs/architecture/ARCHITECTURE.md`
+- Deployment strategy: `docs/architecture/DEPLOYMENT_STRATEGY.md`
 - Finance pack: `docs/finance/FINANCE_PACK.md`
 - Dashboard specification: `docs/design/DASHBOARD_SPEC.md`
 - Design system: `design-system/agent-observatory/MASTER.md`

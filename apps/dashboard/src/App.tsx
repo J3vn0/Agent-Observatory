@@ -49,6 +49,7 @@ import { ec } from "./environment-copy";
 import { AgentRegistryPage } from "./AgentRegistryPage";
 import { FinancePage } from "./FinancePage";
 import { InfoHint } from "./InfoHint";
+import { calculateGraphSignals, countRepeatedDescriptions, type GraphSignal } from "./graph-insights";
 import {
   disambiguatedProjectLabel,
   nodeEnvironment,
@@ -901,19 +902,151 @@ interface VisualNode {
   id: string;
   label: string;
   sublabel: string;
-  kind: "environment" | "project" | "primary" | "subagent";
+  kind: "environment" | "project" | "primary" | "subagent" | "skill";
   x: number;
   y: number;
   environment?: EnvironmentKind;
   projectId?: string;
   description: string;
+  descriptionSource: "derived" | "role-template" | "skill-manifest" | "session-attribution";
+  descriptionReason: string;
   skills: string[];
   executionCount?: number;
+  lastObservedAt?: string;
+  observedUses?: number;
+  projectBreadth?: number;
+  projectIds?: string[];
+  signal?: GraphSignal;
+  repeatedDescriptionCount?: number;
 }
 
 interface VisualEdge {
   source: string;
   target: string;
+  relation: "contains" | "runs" | "uses";
+}
+
+interface AgentSkillLink {
+  sourceId: string;
+  skill: string;
+  observedAt?: string;
+  observedUses: number;
+  projectId: string;
+}
+
+const normalizeGraphIdentity = (value: string) =>
+  value.normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-");
+
+const graphDescriptionReason = (
+  language: Language,
+  source: VisualNode["descriptionSource"],
+) => {
+  const reasons = {
+    derived: {
+      en: "Generated from observed project and session counts.",
+      ko: "관찰된 프로젝트·세션 수를 바탕으로 생성한 요약입니다.",
+    },
+    "role-template": {
+      en: "A privacy-safe role template is used because the local log exposes a role or attributed skill, not the private task prompt.",
+      ko: "로컬 로그에는 비공개 작업 프롬프트가 아니라 역할 또는 귀속 스킬만 남기 때문에 개인정보를 보호하는 공통 역할 설명을 사용합니다.",
+    },
+    "skill-manifest": {
+      en: "Read from the installed skill manifest.",
+      ko: "설치된 스킬 매니페스트에서 읽은 설명입니다.",
+    },
+    "session-attribution": {
+      en: "The skill name was observed in session metadata, but no matching installed manifest description was found.",
+      ko: "세션 메타데이터에서 스킬 이름은 관찰했지만 일치하는 설치 매니페스트 설명을 찾지 못했습니다.",
+    },
+  } as const;
+  return reasons[source][language];
+};
+
+function appendSkillLayer(
+  snapshot: ObservatorySnapshot,
+  nodes: VisualNode[],
+  edges: VisualEdge[],
+  links: AgentSkillLink[],
+  language: Language,
+  x: number,
+  limit = 12,
+) {
+  const manifests = new Map(
+    snapshot.nodes
+      .filter((node) => node.kind === "skill")
+      .map((node) => [normalizeGraphIdentity(node.label), node]),
+  );
+  const aggregate = new Map<string, {
+    label: string;
+    sourceIds: Set<string>;
+    projectIds: Set<string>;
+    observedUses: number;
+    lastObservedAt?: string;
+  }>();
+
+  for (const link of links) {
+    const key = normalizeGraphIdentity(link.skill);
+    if (!key) continue;
+    const current = aggregate.get(key) ?? {
+      label: link.skill,
+      sourceIds: new Set<string>(),
+      projectIds: new Set<string>(),
+      observedUses: 0,
+    };
+    current.sourceIds.add(link.sourceId);
+    current.projectIds.add(link.projectId);
+    current.observedUses += Math.max(1, link.observedUses);
+    if (link.observedAt && (!current.lastObservedAt || link.observedAt > current.lastObservedAt)) {
+      current.lastObservedAt = link.observedAt;
+    }
+    aggregate.set(key, current);
+  }
+
+  const visible = [...aggregate.entries()]
+    .sort((left, right) =>
+      right[1].observedUses - left[1].observedUses
+      || right[1].sourceIds.size - left[1].sourceIds.size
+      || left[1].label.localeCompare(right[1].label),
+    )
+    .slice(0, limit);
+  const visibleKeys = new Set(visible.map(([key]) => key));
+  const rowStep = Math.min(58, 620 / Math.max(visible.length, 1));
+
+  visible.forEach(([key, usage], index) => {
+    const manifest = manifests.get(key);
+    const localized = manifest ? getLocalizedNodeText(manifest, language) : null;
+    const descriptionSource = manifest ? "skill-manifest" : "session-attribution";
+    nodes.push({
+      id: `skill-${key}`,
+      label: localized?.label || usage.label,
+      sublabel: `${usage.observedUses} ${language === "ko" ? "회 사용" : "uses"} · ${usage.sourceIds.size} ${language === "ko" ? "개 연결" : "links"}`,
+      kind: "skill",
+      x,
+      y: 38 + index * rowStep,
+      description: localized?.summary || (
+        language === "ko"
+          ? "세션 메타데이터에서 이 스킬의 사용 흔적이 관찰되었습니다."
+          : "Use of this skill was observed in session metadata."
+      ),
+      descriptionSource,
+      descriptionReason: graphDescriptionReason(language, descriptionSource),
+      skills: [],
+      executionCount: usage.observedUses,
+      observedUses: usage.observedUses,
+      projectBreadth: usage.projectIds.size,
+      projectIds: [...usage.projectIds],
+      ...(usage.lastObservedAt ? { lastObservedAt: usage.lastObservedAt } : {}),
+    });
+  });
+
+  for (const link of links) {
+    const key = normalizeGraphIdentity(link.skill);
+    if (!visibleKeys.has(key)) continue;
+    const edgeId = `${link.sourceId}-skill-${key}`;
+    if (!edges.some((edge) => `${edge.source}-${edge.target}` === edgeId)) {
+      edges.push({ source: link.sourceId, target: `skill-${key}`, relation: "uses" });
+    }
+  }
 }
 
 function buildScopeGraph(
@@ -927,56 +1060,71 @@ function buildScopeGraph(
     const project = projects[0];
     if (!project) return { nodes: [], edges: [] };
     const primary = sessions.filter((session) => session.kind === "primary").slice(0, 12);
-    const subagents = groupSubagentExecutions(sessions, { preserveParent: true }).slice(0, 20);
+    const subagents = groupSubagentExecutions(sessions, { preserveParent: false }).slice(0, 20);
     const nodes: VisualNode[] = [{
       id: project.id,
       label: project.label,
       sublabel: project.environment,
       kind: "project",
-      x: 80,
+      x: 40,
       y: 330,
       environment: project.environment,
       projectId: project.id,
       description: project.environment + " project with " + project.sessionCount + " observed sessions.",
+      descriptionSource: "derived",
+      descriptionReason: graphDescriptionReason(language, "derived"),
       skills: [],
+      lastObservedAt: project.lastObservedAt,
     }];
     primary.forEach((session, index) => nodes.push({
       id: session.id,
       label: session.label,
       sublabel: session.role,
       kind: "primary",
-      x: 470,
+      x: 330,
       y: 70 + index * Math.min(54, 590 / Math.max(primary.length, 1)),
       environment: session.environment,
       projectId: session.projectId,
       description: session.localizedDescription?.[language] || session.description || "Primary execution session.",
+      descriptionSource: "derived",
+      descriptionReason: graphDescriptionReason(language, "derived"),
       skills: session.skills ?? [],
       executionCount: 1,
+      observedUses: 1,
+      projectBreadth: 1,
+      lastObservedAt: session.observedAt,
     }));
     subagents.forEach((group, index) => nodes.push({
       id: group.id,
       label: group.label,
-      sublabel: group.role + (group.executionCount > 1 ? " · " + group.executionCount + "×" : ""),
+      sublabel: group.role + (group.executionCount > 1 ? ` \u00b7 ${group.executionCount}${language === "ko" ? "\ud68c" : " runs"}` : ""),
       kind: "subagent",
-      x: 900 + (index % 2) * 250,
+      x: 640 + (index % 2) * 230,
       y: 38 + Math.floor(index / 2) * 58,
       environment: group.environment,
       projectId: group.projectId,
       description: group.localizedDescription?.[language] || group.description,
+      descriptionSource: "role-template",
+      descriptionReason: graphDescriptionReason(language, "role-template"),
       skills: group.skills,
       executionCount: group.executionCount,
+      observedUses: group.executionCount,
+      projectBreadth: 1,
+      lastObservedAt: group.lastObservedAt,
     }));
-    const primaryIds = new Set(primary.map((session) => session.id));
     const edges: VisualEdge[] = [
-      ...primary.map((session) => ({ source: project.id, target: session.id })),
-      ...subagents.map((group) => ({
-        source:
-          group.parentSessionId && primaryIds.has(group.parentSessionId)
-            ? group.parentSessionId
-            : project.id,
-        target: group.id,
-      })),
+      ...primary.map((session) => ({ source: project.id, target: session.id, relation: "runs" as const })),
+      ...subagents.map((group) => ({ source: project.id, target: group.id, relation: "runs" as const })),
     ];
+    const skillLinks: AgentSkillLink[] = [
+      ...primary.flatMap((session) => (session.skills ?? []).map((skill) => ({
+        sourceId: session.id, skill, observedAt: session.observedAt, observedUses: 1, projectId: session.projectId,
+      }))),
+      ...subagents.flatMap((group) => group.skills.map((skill) => ({
+        sourceId: group.id, skill, observedAt: group.lastObservedAt, observedUses: group.executionCount, projectId: group.projectId,
+      }))),
+    ];
+    appendSkillLayer(snapshot, nodes, edges, skillLinks, language, 1170);
     return { nodes, edges };
   }
 
@@ -994,24 +1142,37 @@ function buildScopeGraph(
     y: 190 + index * 260,
     environment: environment.id,
     description: environment.label + " local agent environment.",
+    descriptionSource: "derived",
+    descriptionReason: graphDescriptionReason(language, "derived"),
     skills: [],
   }));
   visibleProjects.forEach((project, index) => nodes.push({
     id: project.id,
     label: project.label,
-    sublabel: `${project.sessionCount} sessions · ${project.subagentCount} subagents`,
+    sublabel: `${project.sessionCount} sessions \u00b7 ${project.subagentCount} subagents`,
     kind: "project",
-    x: 420 + (index % 3) * 300,
+    x: 370 + (index % 3) * 245,
     y: 45 + Math.floor(index / 3) * 64,
     environment: project.environment,
     projectId: project.id,
     description: project.sessionCount + " sessions and " + project.subagentCount + " subagent runs observed.",
+    descriptionSource: "derived",
+    descriptionReason: graphDescriptionReason(language, "derived"),
     skills: [],
+    lastObservedAt: project.lastObservedAt,
   }));
-  const edges = visibleProjects.map((project) => ({
+  const edges: VisualEdge[] = visibleProjects.map((project) => ({
     source: `environment-${project.environment}`,
     target: project.id,
+    relation: "contains",
   }));
+  const visibleProjectIds = new Set(visibleProjects.map((project) => project.id));
+  const skillLinks: AgentSkillLink[] = sessions
+    .filter((session) => visibleProjectIds.has(session.projectId))
+    .flatMap((session) => (session.skills ?? []).map((skill) => ({
+      sourceId: session.projectId, skill, observedAt: session.observedAt, observedUses: 1, projectId: session.projectId,
+    })));
+  appendSkillLayer(snapshot, nodes, edges, skillLinks, language, 1170, 10);
   return { nodes, edges };
 }
 
@@ -1027,84 +1188,226 @@ function GraphPage({
   onScopeChange: (scope: ObservatoryScope) => void;
 }) {
   const copy = ec(language);
-  const graph = useMemo(() => buildScopeGraph(snapshot, scope, language), [snapshot, scope, language]);
+  const labels = language === "ko"
+    ? {
+        title: "에이전트·스킬 영향 지도",
+        hint: "현재 관찰 범위에서 반복 사용과 연결이 많은 노드를 강조합니다.",
+        high: "강한 관찰 신호",
+        medium: "중간 관찰 신호",
+        baseline: "기본",
+        influence: "관찰 영향력",
+        reuse: "활용도 proxy",
+        uses: "관찰 사용",
+        connections: "연결",
+        projects: "프로젝트",
+        evidence: "점수 근거",
+        caveat: "성공률·토큰·처리 시간 데이터가 없어 실제 효율성을 직접 측정하지 않습니다. 활용도 proxy는 현재 화면의 반복 관찰·연결·프로젝트 범위만 비교한 상대값입니다.",
+        descriptionSource: "설명 출처",
+        repeated: "개 노드가 같은 설명을 공유합니다.",
+        lastObserved: "최근 관찰",
+        roleTemplate: "공통 역할 템플릿",
+        skillManifest: "SKILL.md 매니페스트",
+        sessionAttribution: "세션 귀속 메타데이터",
+        derived: "관찰값 기반 요약",
+        kinds: {
+          environment: "환경",
+          project: "프로젝트",
+          primary: "기본 세션",
+          subagent: "서브에이전트 역할",
+          skill: "스킬",
+        },
+      }
+    : {
+        title: "Agent and skill influence map",
+        hint: "Highlights nodes with stronger reuse and connection evidence in the current observation.",
+        high: "Strong observed signal",
+        medium: "Moderate observed signal",
+        baseline: "Baseline",
+        influence: "Observed influence",
+        reuse: "Reuse proxy",
+        uses: "Observed uses",
+        connections: "Connections",
+        projects: "Projects",
+        evidence: "Score evidence",
+        caveat: "Success rate, token use, and elapsed time are not collected, so actual efficiency is not measured. The reuse proxy is a relative comparison of repeated observations, connections, and project breadth in this view.",
+        descriptionSource: "Description source",
+        repeated: "nodes share this description.",
+        lastObserved: "Last observed",
+        roleTemplate: "Shared role template",
+        skillManifest: "SKILL.md manifest",
+        sessionAttribution: "Session attribution metadata",
+        derived: "Observation-derived summary",
+        kinds: {
+          environment: "Environment",
+          project: "Project",
+          primary: "Primary session",
+          subagent: "Subagent role",
+          skill: "Skill",
+        },
+      };
+
+  const graph = useMemo(() => {
+    const base = buildScopeGraph(snapshot, scope, language);
+    const signals = new Map(
+      calculateGraphSignals(base.nodes, base.edges, snapshot.observedAt)
+        .map((signal) => [signal.nodeId, signal]),
+    );
+    const repeatedDescriptions = countRepeatedDescriptions(base.nodes);
+    return {
+      edges: base.edges,
+      nodes: base.nodes.map((node) => ({
+        ...node,
+        ...(signals.has(node.id) ? { signal: signals.get(node.id) } : {}),
+        ...(repeatedDescriptions.has(node.id)
+          ? { repeatedDescriptionCount: repeatedDescriptions.get(node.id) }
+          : {}),
+      })),
+    };
+  }, [snapshot, scope, language]);
   const positions = new Map(graph.nodes.map((node) => [node.id, node]));
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const activeNode = graph.nodes.find((node) => node.id === activeNodeId);
+  const sourceLabel = (source: VisualNode["descriptionSource"]) => ({
+    derived: labels.derived,
+    "role-template": labels.roleTemplate,
+    "skill-manifest": labels.skillManifest,
+    "session-attribution": labels.sessionAttribution,
+  })[source];
+  const scoreLabel = (node: VisualNode) => node.signal
+    ? `, ${labels.influence} ${node.signal.influenceScore}, ${labels.reuse} ${node.signal.efficiencyProxyScore}`
+    : "";
+
   return (
     <>
       <PageHeader page="graph" language={language} />
       <section className="graph-page-panel">
         <div className="graph-page-toolbar">
-          <div><p className="eyebrow">{copy.environmentGraph}</p><h2>{copy.agentHierarchy}</h2></div>
-          <span><Network size={15} />{copy.graphHint}</span>
+          <div><p className="eyebrow">{copy.environmentGraph}</p><h2>{labels.title}</h2></div>
+          <div className="graph-signal-legend" aria-label={labels.hint}>
+            <span className="legend-high">{labels.high}</span>
+            <span className="legend-medium">{labels.medium}</span>
+            <span>{labels.baseline}</span>
+          </div>
         </div>
         {graph.nodes.length ? (
           <div className="large-graph-shell">
             {activeNode && (
-              <aside className="graph-role-inspector" role="status">
-                <span>{activeNode.kind === "subagent" ? (language === "ko" ? "역할을 확인했습니다" : "Role identified") : kindLabel(activeNode.kind === "primary" ? "execution" : "project", language)}</span>
+              <aside className="graph-role-inspector" aria-label={`${activeNode.label} ${labels.evidence}`}>
+                <span>{labels.kinds[activeNode.kind]}</span>
                 <strong>{activeNode.label}</strong>
                 <p>{activeNode.description}</p>
-                <div>
-                  {activeNode.executionCount && activeNode.executionCount > 1 && <small>{activeNode.executionCount}× {language === "ko" ? "반복 실행" : "repeated runs"}</small>}
+                {activeNode.signal && (
+                  <>
+                    <div className="graph-inspector-scores">
+                      <div><small>{labels.influence}</small><b>{activeNode.signal.influenceScore}</b></div>
+                      <div><small>{labels.reuse}</small><b>{activeNode.signal.efficiencyProxyScore}</b></div>
+                    </div>
+                    <div className="graph-inspector-evidence">
+                      <small>{labels.uses} {activeNode.signal.observedUses}</small>
+                      <small>{labels.connections} {activeNode.signal.connectionCount}</small>
+                      <small>{labels.projects} {activeNode.signal.projectBreadth}</small>
+                    </div>
+                    <p className="graph-score-caveat">{labels.caveat}</p>
+                  </>
+                )}
+                <div className="graph-description-evidence">
+                  <small>{labels.descriptionSource}</small>
+                  <b>{sourceLabel(activeNode.descriptionSource)}</b>
+                  <p>{activeNode.descriptionReason}</p>
+                  {activeNode.repeatedDescriptionCount && activeNode.repeatedDescriptionCount > 1 && (
+                    <em>{activeNode.repeatedDescriptionCount} {labels.repeated}</em>
+                  )}
+                </div>
+                <div className="graph-inspector-tags">
+                  {activeNode.executionCount && activeNode.executionCount > 1 && (
+                    <small>{activeNode.executionCount} {language === "ko" ? "회 반복 관찰" : "observed runs"}</small>
+                  )}
                   {activeNode.skills.map((skill) => <small key={skill}>{skill}</small>)}
+                  {activeNode.lastObservedAt && <small>{labels.lastObserved} · {formatDate(language, activeNode.lastObservedAt)}</small>}
                 </div>
               </aside>
             )}
-            <svg className="large-graph" viewBox="0 0 1400 720" role="img" aria-label={copy.environmentGraph}>
+            <p className="graph-observation-note">{labels.hint}</p>
+            <ul className="sr-only">
+              {graph.nodes.map((node) => (
+                <li key={`accessible-${node.id}`}>
+                  {labels.kinds[node.kind]} {node.label}. {node.description}{scoreLabel(node)}. {node.descriptionReason}
+                </li>
+              ))}
+            </ul>
+            <svg className="large-graph" viewBox="0 0 1400 720">
+              <title>{labels.title}</title>
               <defs>
                 <marker id="scope-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
                   <path d="M 0 0 L 10 5 L 0 10 z" />
                 </marker>
               </defs>
-              <g className="large-graph-guides">
+              <g className="large-graph-guides" aria-hidden="true">
                 <line x1="280" y1="30" x2="280" y2="690" />
-                <line x1="790" y1="30" x2="790" y2="690" />
+                <line x1="570" y1="30" x2="570" y2="690" />
+                <line x1="1100" y1="30" x2="1100" y2="690" />
               </g>
-              <g className="large-graph-edges">
+              <g className="large-graph-edges" aria-hidden="true">
                 {graph.edges.map((edge, index) => {
                   const source = positions.get(edge.source);
                   const target = positions.get(edge.target);
                   if (!source || !target) return null;
-                  return <line key={`${edge.source}-${edge.target}-${index}`} x1={source.x + 180} y1={source.y + 25} x2={target.x} y2={target.y + 25} markerEnd="url(#scope-arrow)" />;
+                  const emphasized = source.signal?.band === "high" || target.signal?.band === "high";
+                  return (
+                    <line
+                      key={`${edge.source}-${edge.target}-${index}`}
+                      className={`graph-edge-${edge.relation}${emphasized ? " edge-emphasis-high" : ""}`}
+                      x1={source.x + 180}
+                      y1={source.y + 25}
+                      x2={target.x}
+                      y2={target.y + 25}
+                      markerEnd="url(#scope-arrow)"
+                    />
+                  );
                 })}
               </g>
-              {graph.nodes.map((node) => (
-                <g
-                  key={node.id}
-                  className={`large-graph-node graph-${node.kind} ${node.environment ? `environment-${node.environment}` : ""}`}
-                  transform={`translate(${node.x} ${node.y})`}
-                  role={node.projectId ? "button" : "group"}
-                  tabIndex={0}
-                  aria-label={node.label + ": " + node.description}
-                  onMouseEnter={() => setActiveNodeId(node.id)}
-                  onMouseLeave={() => setActiveNodeId((current) => current === node.id ? null : current)}
-                  onFocus={() => setActiveNodeId(node.id)}
-                  onBlur={() => setActiveNodeId((current) => current === node.id ? null : current)}
-                  onKeyDown={(event) => {
-                    if ((event.key === "Enter" || event.key === " ") && node.projectId && node.environment) {
-                      event.preventDefault();
-                      onScopeChange({ environment: node.environment, projectId: node.projectId });
-                    }
-                  }}
-                  onClick={() => {
-                    if (node.projectId && node.environment) {
-                      onScopeChange({ environment: node.environment, projectId: node.projectId });
-                    }
-                  }}
-                >
-                  <title>{node.label + " — " + node.description}</title>
-                  <rect width="180" height="50" rx="10" />
-                  <circle cx="18" cy="17" r="4" />
-                  <text x="30" y="20" className="graph-label">
-                    {node.label.length > 22 ? `${node.label.slice(0, 21)}…` : node.label}
-                  </text>
-                  <text x="18" y="37" className="graph-sublabel">
-                    {node.sublabel.length > 30 ? `${node.sublabel.slice(0, 29)}…` : node.sublabel}
-                  </text>
-                </g>
-              ))}
+              {graph.nodes.map((node) => {
+                const canNavigate = node.kind === "project"
+                  && Boolean(node.projectId && node.environment)
+                  && node.projectId !== scope.projectId;
+                return (
+                  <g
+                    key={node.id}
+                    className={`large-graph-node graph-${node.kind} emphasis-${node.signal?.band || "baseline"} ${node.environment ? `environment-${node.environment}` : ""}`}
+                    transform={`translate(${node.x} ${node.y})`}
+                    role={canNavigate ? "button" : "group"}
+                    tabIndex={0}
+                    aria-label={node.label + ": " + node.description + scoreLabel(node)}
+                    onMouseEnter={() => setActiveNodeId(node.id)}
+                    onMouseLeave={() => setActiveNodeId((current) => current === node.id ? null : current)}
+                    onFocus={() => setActiveNodeId(node.id)}
+                    onBlur={() => setActiveNodeId((current) => current === node.id ? null : current)}
+                    onKeyDown={(event) => {
+                      if ((event.key === "Enter" || event.key === " ") && canNavigate && node.projectId && node.environment) {
+                        event.preventDefault();
+                        onScopeChange({ environment: node.environment, projectId: node.projectId });
+                      }
+                    }}
+                    onClick={() => {
+                      setActiveNodeId(node.id);
+                      if (canNavigate && node.projectId && node.environment) {
+                        onScopeChange({ environment: node.environment, projectId: node.projectId });
+                      }
+                    }}
+                  >
+                    <title>{node.label + " — " + node.description + scoreLabel(node)}</title>
+                    <rect width="180" height="50" rx="10" />
+                    <circle cx="18" cy="17" r="4" />
+                    <text x="30" y="20" className="graph-label">
+                      {node.label.length > 22 ? `${node.label.slice(0, 21)}…` : node.label}
+                    </text>
+                    {node.signal && <text x="156" y="20" className="graph-score">{node.signal.influenceScore}</text>}
+                    <text x="18" y="37" className="graph-sublabel">
+                      {node.sublabel.length > 30 ? `${node.sublabel.slice(0, 29)}…` : node.sublabel}
+                    </text>
+                  </g>
+                );
+              })}
             </svg>
           </div>
         ) : <EmptyState text={copy.noProjectActivity} />}
