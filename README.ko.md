@@ -8,7 +8,7 @@ Codex와 Claude의 프로젝트, 세션, 서브에이전트, 스킬, 플러그�
 MCP 서버와 승인 기반 에이전트 승격을 탐색하는 로컬 우선 컨트롤
 플레인입니다.
 
-**한국어** · [English](./README.md) · [설치 안내](./SETUP.md) · [아키텍처](./docs/architecture/ARCHITECTURE.md) · [배포 전략](./docs/architecture/DEPLOYMENT_STRATEGY.md)
+**한국어** · [English](./README.md) · [설치 안내](./SETUP.md) · [호환성](./docs/COMPATIBILITY.ko.md) · [아키텍처](./docs/architecture/ARCHITECTURE.md) · [배포 전략](./docs/architecture/DEPLOYMENT_STRATEGY.md)
 
 ![Local First](https://img.shields.io/badge/local--first-yes-13765a?style=flat-square)
 ![Package](https://img.shields.io/badge/package-0.4.0-201f1b?style=flat-square)
@@ -52,6 +52,35 @@ Agent Observatory는 표시하기 안전한 로컬 메타데이터를 설명 가
 | **그래프** | 환경, 프로젝트, 역할, 스킬 관계와 관찰 영향·활용 신호 확인 |
 | **승격** | 명시적 승인 후 공용 Markdown 또는 Codex TOML 에이전트 정의 미리보기·생성 |
 | **Finance Lab** | 비용·안전장치를 포함한 연결되지 않은 개인화·리서치 흐름 데모 |
+
+## AI 환경 호환성
+
+여기서 호환된다는 말은 Agent Observatory가 **로컬 메타데이터를 탐색하고
+정규화할 수 있다**는 뜻입니다. 기반 모델을 직접 호출하거나 내장한다는
+뜻은 아닙니다. GPT, Claude, Gemini 중 어떤 모델을 쓰는지가 아니라 해당
+환경의 파일 형식과 세션 기록을 읽을 수 있는지가 통합 수준을 결정합니다.
+
+| 환경 | 수준 | 현재 Agent Observatory에서 가능한 작업 |
+|---|---|---|
+| **OpenAI Codex** | ✅ 네이티브 어댑터 | `~/.codex`의 프로젝트, 세션, 서브에이전트와 로컬 기능 메타데이터 탐색; Codex TOML 에이전트 정의 생성 전 미리보기 지원 |
+| **Anthropic Claude Code** | ✅ 네이티브 어댑터 | `~/.claude`의 프로젝트, 세션, 서브에이전트와 로컬 기능 메타데이터 탐색; 관찰한 프로필을 공용 또는 Codex 승격 형식으로 정규화 |
+| **공용 `~/.agents` 정의** | 🧩 공용 매니페스트 | 재사용 가능한 에이전트·기능 정의 탐색; 실행 세션은 네이티브 환경 어댑터에서 가져옴 |
+| **Cursor** | 🧭 어댑터 후보 | Cursor 자체는 MCP를 지원하지만, 아직 Cursor 프로젝트·규칙·세션을 자동 스캔하지 않음 |
+| **Gemini CLI** | 🧭 어댑터 후보 | Gemini CLI는 MCP 설정과 상태를 제공하지만, 아직 `~/.gemini`를 스캔하지 않음 |
+| **GitHub Copilot** | 🧭 어댑터 후보 | 커스텀 에이전트 프로필, 스킬, MCP 설정을 지원하며 저장소·CLI 어댑터는 계획 단계 |
+| **Windsurf** | 🧭 어댑터 후보 | Cascade는 MCP 설정을 지원하지만, 아직 Windsurf 상태를 탐색하지 않음 |
+| **OpenCode** | 🧭 어댑터 후보 | 주·서브에이전트 정의, 권한, MCP 설정을 제공하지만 전용 어댑터가 없음 |
+| **Cline** | 🧭 어댑터 후보 | 프로젝트·글로벌 에이전트, 스킬, 훅, 플러그인, MCP 설정, 세션 저장소를 제공하지만 전용 어댑터가 없음 |
+
+근거, 공식 문서 링크, 예상 스캔 경로, 어댑터 우선순위는
+[상세 호환성 매트릭스](./docs/COMPATIBILITY.ko.md)에서 확인할 수 있습니다.
+새 어댑터는 정규화 그래프 계약을 바꾸지 않고 탐색·비교 범위를 확장하도록
+설계합니다.
+
+> [!NOTE]
+> 현재 Agent Observatory는 승인된 경로에서 발견한 **MCP 설정을
+> 인벤토리화**합니다. 모든 MCP 클라이언트가 접속하는 범용 MCP 서버는
+> 아직 아니며, 인벤토리를 만들기 위해 MCP 도구를 임의로 실행하지 않습니다.
 
 그래프의 활용도 점수는 관찰 사용량, 연결 수, 프로젝트 범위를 이용한
 상대 proxy입니다. 성공률, 결과 품질, 토큰 효율을 측정한 점수가 아닙니다.

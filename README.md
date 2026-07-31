@@ -8,7 +8,7 @@ A local-first control plane for exploring Codex and Claude projects, sessions,
 subagents, skills, plugins, hooks, MCP servers, and approval-gated agent
 promotion.
 
-[한국어](./README.ko.md) · **English** · [Setup](./SETUP.md) · [Architecture](./docs/architecture/ARCHITECTURE.md) · [Deployment strategy](./docs/architecture/DEPLOYMENT_STRATEGY.md)
+[한국어](./README.ko.md) · **English** · [Setup](./SETUP.md) · [Compatibility](./docs/COMPATIBILITY.md) · [Architecture](./docs/architecture/ARCHITECTURE.md) · [Deployment strategy](./docs/architecture/DEPLOYMENT_STRATEGY.md)
 
 ![Local First](https://img.shields.io/badge/local--first-yes-13765a?style=flat-square)
 ![Package](https://img.shields.io/badge/package-0.4.0-201f1b?style=flat-square)
@@ -52,6 +52,34 @@ inventory, registry, and relationship graph.
 | **Graph** | View environment, project, role, and skill relationships with observed influence and reuse signals |
 | **Promote** | Preview and create a new shared Markdown or Codex TOML agent definition after explicit approval |
 | **Finance Lab** | Explore a disconnected personalization and research-workflow demo with cost and safety guardrails |
+
+## AI environment compatibility
+
+Compatibility here means that Agent Observatory can **discover and normalize
+local metadata**. It does not mean that Agent Observatory calls or embeds the
+underlying model. The environment's file formats and session records determine
+the integration level, not whether it uses GPT, Claude, Gemini, or another model.
+
+| Environment | Level | Available in Agent Observatory today |
+|---|---|---|
+| **OpenAI Codex** | ✅ Native adapter | Discovers projects, sessions, subagents, and local capability metadata under `~/.codex`; can preview and create a Codex TOML agent definition |
+| **Anthropic Claude Code** | ✅ Native adapter | Discovers projects, sessions, subagents, and local capability metadata under `~/.claude`; observed profiles can be normalized for shared or Codex promotion |
+| **Shared `~/.agents` definitions** | 🧩 Shared manifest | Discovers reusable agent and capability definitions; runtime sessions still come from a native environment adapter |
+| **Cursor** | 🧭 Adapter candidate | Cursor supports MCP, but Agent Observatory does not yet scan Cursor projects, rules, or sessions |
+| **Gemini CLI** | 🧭 Adapter candidate | Gemini CLI exposes MCP configuration and status, but `~/.gemini` is not yet a scan root |
+| **GitHub Copilot** | 🧭 Adapter candidate | Copilot supports custom agent profiles, skills, and MCP configuration; repository and CLI adapters are planned |
+| **Windsurf** | 🧭 Adapter candidate | Cascade supports MCP configuration, but Agent Observatory does not yet discover Windsurf state |
+| **OpenCode** | 🧭 Adapter candidate | OpenCode provides primary/subagent definitions, permissions, and MCP configuration; no dedicated adapter exists yet |
+| **Cline** | 🧭 Adapter candidate | Cline exposes project/global agents, skills, hooks, plugins, MCP configuration, and session storage; no dedicated adapter exists yet |
+
+For the evidence, source links, expected scan roots, and adapter order, see the
+[detailed compatibility matrix](./docs/COMPATIBILITY.md). A future adapter can
+add discovery and comparison without changing the normalized graph contract.
+
+> [!NOTE]
+> Agent Observatory currently **inventories MCP configuration** found in its
+> approved roots. It is not yet a universal MCP server that every client can
+> connect to, and it never invokes an MCP tool merely to build the inventory.
 
 The graph's reuse score is a relative proxy based on observed uses, connections,
 and project breadth. It is **not** a success rate, quality score, or token
