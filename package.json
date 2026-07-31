@@ -12,6 +12,7 @@
     "dev": "npm run dev:dashboard",
     "dev:dashboard": "npm run dev --workspace @agent-observatory/dashboard",
     "dev:daemon": "npm run dev --workspace @agent-observatory/daemon",
+    "docs:screenshots": "node scripts/capture-readme-screenshots.mjs",
     "start:daemon": "npm run start --workspace @agent-observatory/daemon",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"

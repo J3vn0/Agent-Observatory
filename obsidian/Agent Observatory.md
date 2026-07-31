@@ -143,6 +143,7 @@ The finance pack starts with ETF, bond, filing, and macro-research workflows. It
 
 - [[Work Log/2026-07-23]]
 - [[Work Log/2026-07-31]]
+- [[Work Log/2026-08-01]]
 - Product brief: `docs/product/PRODUCT_BRIEF.md`
 - Architecture: `docs/architecture/ARCHITECTURE.md`
 - Deployment strategy: `docs/architecture/DEPLOYMENT_STRATEGY.md`

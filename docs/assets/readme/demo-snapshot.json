@@ -1,0 +1,513 @@
+{
+  "observedAt": "2026-08-01T00:00:00.000Z",
+  "mode": "fixture",
+  "environments": [
+    {
+      "id": "codex",
+      "label": "Codex",
+      "installed": true,
+      "capabilities": ["projects", "sessions", "subagents", "skills", "mcp"],
+      "projectCount": 2,
+      "sessionCount": 7,
+      "subagentCount": 5
+    },
+    {
+      "id": "claude",
+      "label": "Claude",
+      "installed": true,
+      "capabilities": ["projects", "sessions", "subagents", "plugins", "hooks"],
+      "projectCount": 2,
+      "sessionCount": 6,
+      "subagentCount": 4
+    }
+  ],
+  "projects": [
+    {
+      "id": "project-atlas",
+      "environment": "codex",
+      "label": "Atlas Research",
+      "pathLabel": "Atlas Research",
+      "sessionCount": 4,
+      "subagentCount": 3,
+      "lastObservedAt": "2026-08-01T00:00:00.000Z"
+    },
+    {
+      "id": "project-scout",
+      "environment": "codex",
+      "label": "Scout2Map",
+      "pathLabel": "Scout2Map",
+      "sessionCount": 3,
+      "subagentCount": 2,
+      "lastObservedAt": "2026-07-31T23:40:00.000Z"
+    },
+    {
+      "id": "project-libra",
+      "environment": "claude",
+      "label": "Libra VX",
+      "pathLabel": "Libra VX",
+      "sessionCount": 3,
+      "subagentCount": 2,
+      "lastObservedAt": "2026-07-31T23:10:00.000Z"
+    },
+    {
+      "id": "project-risk",
+      "environment": "claude",
+      "label": "Risk Notes",
+      "pathLabel": "Risk Notes",
+      "sessionCount": 3,
+      "subagentCount": 2,
+      "lastObservedAt": "2026-07-31T22:30:00.000Z"
+    }
+  ],
+  "sessions": [
+    {
+      "id": "atlas-primary",
+      "environment": "codex",
+      "projectId": "project-atlas",
+      "kind": "primary",
+      "label": "Atlas session",
+      "role": "primary",
+      "description": "Coordinates evidence-first research work.",
+      "skills": ["Filings evidence", "ETF compare"],
+      "observedAt": "2026-08-01T00:00:00.000Z",
+      "source": "Codex"
+    },
+    {
+      "id": "atlas-research-1",
+      "environment": "codex",
+      "projectId": "project-atlas",
+      "kind": "subagent",
+      "parentSessionId": "atlas-primary",
+      "label": "Research Analyst",
+      "role": "researcher",
+      "description": "Collects cited evidence and compares sources.",
+      "localizedDescription": {
+        "en": "Collects cited evidence and compares sources.",
+        "ko": "인용 가능한 근거를 수집하고 출처를 비교합니다."
+      },
+      "skills": ["Filings evidence", "ETF compare"],
+      "observedAt": "2026-08-01T00:00:00.000Z",
+      "source": "Codex"
+    },
+    {
+      "id": "atlas-research-2",
+      "environment": "codex",
+      "projectId": "project-atlas",
+      "kind": "subagent",
+      "parentSessionId": "atlas-primary",
+      "label": "Research Analyst",
+      "role": "researcher",
+      "description": "Collects cited evidence and compares sources.",
+      "localizedDescription": {
+        "en": "Collects cited evidence and compares sources.",
+        "ko": "인용 가능한 근거를 수집하고 출처를 비교합니다."
+      },
+      "skills": ["Filings evidence", "ETF compare"],
+      "observedAt": "2026-07-31T23:55:00.000Z",
+      "source": "Codex"
+    },
+    {
+      "id": "atlas-verifier",
+      "environment": "codex",
+      "projectId": "project-atlas",
+      "kind": "subagent",
+      "parentSessionId": "atlas-primary",
+      "label": "Source Verifier",
+      "role": "reviewer",
+      "description": "Checks freshness, citations, and unsupported claims.",
+      "localizedDescription": {
+        "en": "Checks freshness, citations, and unsupported claims.",
+        "ko": "최신성, 인용, 근거 없는 주장을 검증합니다."
+      },
+      "skills": ["Citation audit"],
+      "observedAt": "2026-07-31T23:50:00.000Z",
+      "source": "Codex"
+    },
+    {
+      "id": "scout-primary",
+      "environment": "codex",
+      "projectId": "project-scout",
+      "kind": "primary",
+      "label": "Scout session",
+      "role": "primary",
+      "description": "Coordinates market-mapping research.",
+      "skills": ["Filings evidence"],
+      "observedAt": "2026-07-31T23:40:00.000Z",
+      "source": "Codex"
+    },
+    {
+      "id": "scout-research-1",
+      "environment": "codex",
+      "projectId": "project-scout",
+      "kind": "subagent",
+      "parentSessionId": "scout-primary",
+      "label": "Research Analyst",
+      "role": "researcher",
+      "description": "Collects cited evidence and compares sources.",
+      "localizedDescription": {
+        "en": "Collects cited evidence and compares sources.",
+        "ko": "인용 가능한 근거를 수집하고 출처를 비교합니다."
+      },
+      "skills": ["Filings evidence", "ETF compare"],
+      "observedAt": "2026-07-31T23:38:00.000Z",
+      "source": "Codex"
+    },
+    {
+      "id": "scout-research-2",
+      "environment": "codex",
+      "projectId": "project-scout",
+      "kind": "subagent",
+      "parentSessionId": "scout-primary",
+      "label": "Research Analyst",
+      "role": "researcher",
+      "description": "Collects cited evidence and compares sources.",
+      "localizedDescription": {
+        "en": "Collects cited evidence and compares sources.",
+        "ko": "인용 가능한 근거를 수집하고 출처를 비교합니다."
+      },
+      "skills": ["Filings evidence", "ETF compare"],
+      "observedAt": "2026-07-31T23:32:00.000Z",
+      "source": "Codex"
+    },
+    {
+      "id": "libra-primary",
+      "environment": "claude",
+      "projectId": "project-libra",
+      "kind": "primary",
+      "label": "Libra session",
+      "role": "primary",
+      "description": "Coordinates frontend review and implementation.",
+      "skills": ["UI UX review"],
+      "observedAt": "2026-07-31T23:10:00.000Z",
+      "source": "Claude"
+    },
+    {
+      "id": "libra-reviewer-1",
+      "environment": "claude",
+      "projectId": "project-libra",
+      "kind": "subagent",
+      "parentSessionId": "libra-primary",
+      "label": "Frontend Reviewer",
+      "role": "reviewer",
+      "description": "Reviews layout, accessibility, and interaction states.",
+      "localizedDescription": {
+        "en": "Reviews layout, accessibility, and interaction states.",
+        "ko": "레이아웃, 접근성, 상호작용 상태를 검토합니다."
+      },
+      "skills": ["UI UX review", "Visual verification"],
+      "observedAt": "2026-07-31T23:08:00.000Z",
+      "source": "Claude"
+    },
+    {
+      "id": "libra-reviewer-2",
+      "environment": "claude",
+      "projectId": "project-libra",
+      "kind": "subagent",
+      "parentSessionId": "libra-primary",
+      "label": "Frontend Reviewer",
+      "role": "reviewer",
+      "description": "Reviews layout, accessibility, and interaction states.",
+      "localizedDescription": {
+        "en": "Reviews layout, accessibility, and interaction states.",
+        "ko": "레이아웃, 접근성, 상호작용 상태를 검토합니다."
+      },
+      "skills": ["UI UX review", "Visual verification"],
+      "observedAt": "2026-07-31T22:58:00.000Z",
+      "source": "Claude"
+    },
+    {
+      "id": "risk-primary",
+      "environment": "claude",
+      "projectId": "project-risk",
+      "kind": "primary",
+      "label": "Risk session",
+      "role": "primary",
+      "description": "Coordinates policy and risk review.",
+      "skills": ["Citation audit"],
+      "observedAt": "2026-07-31T22:30:00.000Z",
+      "source": "Claude"
+    },
+    {
+      "id": "risk-compliance-1",
+      "environment": "claude",
+      "projectId": "project-risk",
+      "kind": "subagent",
+      "parentSessionId": "risk-primary",
+      "label": "Compliance Reviewer",
+      "role": "reviewer",
+      "description": "Separates evidence, inference, and policy constraints.",
+      "localizedDescription": {
+        "en": "Separates evidence, inference, and policy constraints.",
+        "ko": "근거, 추론, 정책 제약을 구분합니다."
+      },
+      "skills": ["Citation audit"],
+      "observedAt": "2026-07-31T22:28:00.000Z",
+      "source": "Claude"
+    },
+    {
+      "id": "risk-compliance-2",
+      "environment": "claude",
+      "projectId": "project-risk",
+      "kind": "subagent",
+      "parentSessionId": "risk-primary",
+      "label": "Compliance Reviewer",
+      "role": "reviewer",
+      "description": "Separates evidence, inference, and policy constraints.",
+      "localizedDescription": {
+        "en": "Separates evidence, inference, and policy constraints.",
+        "ko": "근거, 추론, 정책 제약을 구분합니다."
+      },
+      "skills": ["Citation audit"],
+      "observedAt": "2026-07-31T22:18:00.000Z",
+      "source": "Claude"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "agent-global-research",
+      "label": "Research Analyst Agent",
+      "kind": "agent",
+      "health": "healthy",
+      "summary": "Reusable evidence-first research agent.",
+      "tags": ["research", "citations", "read-only"],
+      "source": "Shared agents",
+      "origin": "agents",
+      "version": "1.0.0",
+      "enabled": true
+    },
+    {
+      "id": "agent-global-reviewer",
+      "label": "Frontend Reviewer Agent",
+      "kind": "agent",
+      "health": "healthy",
+      "summary": "Reusable interface and accessibility reviewer.",
+      "tags": ["frontend", "review", "accessibility"],
+      "source": "Shared agents",
+      "origin": "agents",
+      "version": "1.1.0",
+      "enabled": true
+    },
+    {
+      "id": "skill-filings",
+      "label": "Filings evidence",
+      "kind": "skill",
+      "health": "healthy",
+      "summary": "Collects and cites regulatory filing evidence.",
+      "tags": ["finance", "filings", "citations", "read-only"],
+      "source": "Codex skill",
+      "origin": "codex",
+      "version": "1.2.0",
+      "enabled": true
+    },
+    {
+      "id": "skill-etf",
+      "label": "ETF compare",
+      "kind": "skill",
+      "health": "healthy",
+      "summary": "Compares ETF structure, costs, exposure, and liquidity.",
+      "tags": ["finance", "etf", "comparison"],
+      "source": "Shared skill",
+      "origin": "agents",
+      "version": "0.8.2",
+      "enabled": true
+    },
+    {
+      "id": "skill-citation",
+      "label": "Citation audit",
+      "kind": "skill",
+      "health": "healthy",
+      "summary": "Checks source coverage and unsupported claims.",
+      "tags": ["research", "citations", "verification"],
+      "source": "Claude skill",
+      "origin": "claude",
+      "version": "0.6.0",
+      "enabled": true
+    },
+    {
+      "id": "skill-ui",
+      "label": "UI UX review",
+      "kind": "skill",
+      "health": "healthy",
+      "summary": "Reviews layout, hierarchy, accessibility, and states.",
+      "tags": ["frontend", "design", "accessibility"],
+      "source": "Claude skill",
+      "origin": "claude",
+      "version": "2.0.0",
+      "enabled": true
+    },
+    {
+      "id": "skill-visual",
+      "label": "Visual verification",
+      "kind": "skill",
+      "health": "healthy",
+      "summary": "Checks rendered UI, console, network, and computed styles.",
+      "tags": ["frontend", "testing", "browser"],
+      "source": "Shared skill",
+      "origin": "agents",
+      "version": "1.0.0",
+      "enabled": true
+    },
+    {
+      "id": "plugin-github",
+      "label": "GitHub",
+      "kind": "plugin",
+      "health": "healthy",
+      "summary": "Repository, issue, and pull request integration.",
+      "tags": ["git", "collaboration", "repository"],
+      "source": "Plugin cache",
+      "origin": "plugin-cache",
+      "version": "0.1.8",
+      "enabled": true
+    },
+    {
+      "id": "plugin-supabase",
+      "label": "Supabase",
+      "kind": "plugin",
+      "health": "healthy",
+      "summary": "Postgres, authentication, storage, and RLS guidance.",
+      "tags": ["database", "postgres", "auth"],
+      "source": "Plugin cache",
+      "origin": "plugin-cache",
+      "version": "0.1.13",
+      "enabled": true
+    },
+    {
+      "id": "plugin-legacy",
+      "label": "Legacy deploy helper",
+      "kind": "plugin",
+      "health": "attention",
+      "summary": "Installed integration with no recent observed consumer.",
+      "tags": ["deployment", "legacy"],
+      "source": "Plugin cache",
+      "origin": "plugin-cache",
+      "version": "0.2.0",
+      "enabled": false
+    },
+    {
+      "id": "hook-verify",
+      "label": "Post-task verification",
+      "kind": "hook",
+      "health": "healthy",
+      "summary": "Runs bounded verification after implementation tasks.",
+      "tags": ["verification", "automation"],
+      "source": "Codex config",
+      "origin": "config",
+      "enabled": true
+    },
+    {
+      "id": "hook-memory",
+      "label": "Session memory note",
+      "kind": "hook",
+      "health": "healthy",
+      "summary": "Writes a display-safe project work note after completion.",
+      "tags": ["memory", "documentation"],
+      "source": "Claude config",
+      "origin": "config",
+      "enabled": true
+    },
+    {
+      "id": "mcp-files",
+      "label": "Workspace files",
+      "kind": "mcp-server",
+      "health": "healthy",
+      "summary": "Repository-scoped file access.",
+      "tags": ["filesystem", "local", "coding"],
+      "source": "stdio",
+      "origin": "config",
+      "version": "3.0.0",
+      "enabled": true
+    },
+    {
+      "id": "mcp-browser",
+      "label": "Chrome DevTools",
+      "kind": "mcp-server",
+      "health": "healthy",
+      "summary": "Browser rendering and diagnostics.",
+      "tags": ["browser", "frontend", "testing"],
+      "source": "stdio",
+      "origin": "config",
+      "version": "1.6.0",
+      "enabled": true
+    },
+    {
+      "id": "mcp-market",
+      "label": "Market data sandbox",
+      "kind": "mcp-server",
+      "health": "attention",
+      "summary": "Disconnected sample provider for finance workflow design.",
+      "tags": ["finance", "market-data", "demo"],
+      "source": "HTTP",
+      "origin": "config",
+      "version": "0.1.0",
+      "enabled": false
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-research-filings",
+      "source": "agent-global-research",
+      "target": "skill-filings",
+      "kind": "USES",
+      "evidence": ["agent manifest"]
+    },
+    {
+      "id": "edge-research-etf",
+      "source": "agent-global-research",
+      "target": "skill-etf",
+      "kind": "USES",
+      "evidence": ["agent manifest"]
+    },
+    {
+      "id": "edge-review-ui",
+      "source": "agent-global-reviewer",
+      "target": "skill-ui",
+      "kind": "USES",
+      "evidence": ["agent manifest"]
+    },
+    {
+      "id": "edge-review-visual",
+      "source": "agent-global-reviewer",
+      "target": "skill-visual",
+      "kind": "USES",
+      "evidence": ["agent manifest"]
+    },
+    {
+      "id": "edge-filings-files",
+      "source": "skill-filings",
+      "target": "mcp-files",
+      "kind": "REQUIRES",
+      "evidence": ["skill instructions"]
+    },
+    {
+      "id": "edge-visual-browser",
+      "source": "skill-visual",
+      "target": "mcp-browser",
+      "kind": "REQUIRES",
+      "evidence": ["skill instructions"]
+    }
+  ],
+  "findings": [
+    {
+      "id": "finding-promotion",
+      "severity": "info",
+      "title": "Research Analyst repeats across projects",
+      "detail": "The same role and skills were observed in Atlas Research and Scout2Map.",
+      "action": "Review global promotion candidate"
+    },
+    {
+      "id": "finding-unused-plugin",
+      "severity": "attention",
+      "title": "One plugin is disabled and unused",
+      "detail": "Legacy deploy helper has no recent observed consumer.",
+      "action": "Compare before removing"
+    }
+  ],
+  "source": {
+    "codexRoot": "Codex home",
+    "agentsRoot": "Shared agents home",
+    "claudeRoot": "Claude home",
+    "scannedPaths": ["Codex metadata", "Claude metadata", "Shared agent manifests"],
+    "scanDurationMs": 184,
+    "redactedFields": ["messages", "prompts", "absolute paths", "credentials"]
+  }
+}
